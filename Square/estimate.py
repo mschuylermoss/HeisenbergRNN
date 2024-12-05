@@ -1,8 +1,7 @@
-import time
-import pickle
 import os
+import pickle
+import time
 import warnings
-import sys
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -175,7 +174,7 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
             samples_dist = strategy.run(sample_fxn, args=(batch_size_per_device,))
             _, logpsis = strategy.run(log_fxn, args=(samples_dist,))
             logpsis_stacked = strategy.run(lambda _x: tf.stack([tf.math.real(_x),
-                                                                tf.math.imag(_x)], axis=-1), args=(logpsis, ))
+                                                                tf.math.imag(_x)], axis=-1), args=(logpsis,))
             logpsis_stacked_gathered = strategy.gather(logpsis_stacked, axis=0)
 
             return strategy.gather(samples_dist, axis=0), tf.complex(logpsis_stacked_gathered[:, 0],
@@ -236,6 +235,7 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
     @tf.function()
     def distributed_rsp_corr_fxn_zz_xx_yy(samples, logamps, j_matrix):
         print("Tracing distributed xx_yy_zz")
+
         @tf.function()
         def value_fn(ctx):
             samples_chunked = tf.reshape(samples, (number_of_replicas, batch_size_per_device, N_spins))
@@ -312,8 +312,8 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
                         var_sxy_matrix)
         print(f"Time per interaction batch: {time.time() - timestart}")
 
-    if not np.isnan(sz_matrix[-1,-1]): # done calculating matrix
-        if correlation_mode=='Sxyz':
+    if not np.isnan(sz_matrix[-1, -1]):  # done calculating matrix
+        if correlation_mode == 'Sxyz':
             undo_marshall_sign_minus_signs = undo_marshall_sign(Nx)
             SiSj = sz_matrix + sxy_matrix * undo_marshall_sign_minus_signs
             var_SiSj = var_sz_matrix + var_sxy_matrix
@@ -323,8 +323,8 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
             print(f"Sk (from <SiSj>) = {Sk}")
 
         else:
-            SiSj = 3*sz_matrix
-            var_SiSj = 3*var_sz_matrix
+            SiSj = 3 * sz_matrix
+            var_SiSj = 3 * var_sz_matrix
             Sk, err_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
             np.save(save_path + corr_final_directory + f'Sk_from_SziSzj', Sk)
             np.save(save_path + corr_final_directory + f'err_Sk_from_SziSzj', err_Sk)
@@ -392,7 +392,7 @@ def estimate_Sk_from_Si_distributed(config, save_path, sample_fxn, log_fxn, stra
             samples_dist = strategy.run(sample_fxn, args=(batch_size_per_device,))
             _, logpsis = strategy.run(log_fxn, args=(samples_dist,))
             logpsis_stacked = strategy.run(lambda _x: tf.stack([tf.math.real(_x),
-                                                                tf.math.imag(_x)], axis=-1), args=(logpsis, ))
+                                                                tf.math.imag(_x)], axis=-1), args=(logpsis,))
             logpsis_stacked_gathered = strategy.gather(logpsis_stacked, axis=0)
 
             return strategy.gather(samples_dist, axis=0), tf.complex(logpsis_stacked_gathered[:, 0],
@@ -414,6 +414,7 @@ def estimate_Sk_from_Si_distributed(config, save_path, sample_fxn, log_fxn, stra
         @tf.function()
         def distributed_Si_fxn_zz_xx_yy(samples, logamps):
             print("Tracing distributed xx_yy_zz")
+
             @tf.function()
             def value_fn(ctx):
                 samples_chunked = tf.reshape(samples, (number_of_replicas, batch_size_per_device, N_spins))
@@ -423,7 +424,7 @@ def estimate_Sk_from_Si_distributed(config, save_path, sample_fxn, log_fxn, stra
             samples_distributed, logpsis_distributed = strategy.experimental_distribute_values_from_function(value_fn)
             zz = strategy.run(lambda _x: tf.math.real(Si_zz(_x)), args=(samples_distributed,))
             xx_yy = strategy.run(lambda _x, _y: tf.math.real(Si_xx_yy(_x, _y)),
-                                args=(samples_distributed, logpsis_distributed,))
+                                 args=(samples_distributed, logpsis_distributed,))
             return strategy.gather(zz, axis=0), strategy.gather(xx_yy, axis=0)
 
         @tf.function()
@@ -452,13 +453,13 @@ def estimate_Sk_from_Si_distributed(config, save_path, sample_fxn, log_fxn, stra
                 szi = distributed_Si_fxn_zz(samples_batch)
                 Sis_batch = szi
 
-            mean_ft_Si, var_ft_Si = calculate_expectation_ft_Si_square(Nx,Sis_batch)
+            mean_ft_Si, var_ft_Si = calculate_expectation_ft_Si_square(Nx, Sis_batch)
             batch_means_ft_si[batch_s] = mean_ft_Si
             batch_vars_ft_si[batch_s] = var_ft_Si
 
         Si_allsamples = np.mean(batch_means_ft_si, axis=0)
         var_ft_Si_allsamples = np.mean(batch_vars_ft_si, axis=0) + np.var(batch_means_ft_si, axis=0)
-        Sk = 1/(N_spins) * 3 * Si_allsamples
+        Sk = 1 / (N_spins) * 3 * Si_allsamples
 
         if task_id == 0:
             if correlation_mode == 'Sxyz':
@@ -475,18 +476,18 @@ def estimate_Sk_from_Si_distributed(config, save_path, sample_fxn, log_fxn, stra
 
         if PRINT:
             print(f"\n Done calculating Sk from <Si>'s... "
-                f"(calculated with {num_samples_final_correlations_estimate} samples)")
+                  f"(calculated with {num_samples_final_correlations_estimate} samples)")
 
     else:
         print(f"\n Already calculated Sk from <Si>'s... "
-                f"(calculated with {num_samples_final_correlations_estimate} samples)")
+              f"(calculated with {num_samples_final_correlations_estimate} samples)")
 
         if correlation_mode == 'Sxyz':
             Sk = np.load(save_path + corr_final_directory + f'/Sk_from_Si.npy')
         else:
             Sk = np.load(save_path + corr_final_directory + f'/Sk_from_Szi.npy')
         print(f"Sk (from <Si>) = {Sk}")
-        
+
 
 def estimate_(config: dict):
     print("\nEstimating...")
@@ -501,7 +502,7 @@ def estimate_(config: dict):
     # Get quantities to estimate
     ENERGY = config.get('ENERGY', False)
     CORRELATIONS_MATRIX = config.get('CORRELATIONS_MATRIX', False)
-    Sk_from_Si = config.get('Sk_from_Si',False)
+    Sk_from_Si = config.get('Sk_from_Si', False)
 
     # Get save path
     data_path_prepend = config.get('data_path_prepend', './data/')
@@ -525,22 +526,21 @@ def estimate_(config: dict):
     if ENERGY:
         estimate_energy(config, save_path, energy_function, RNNWF.sample,
                         lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries, parity=spin_parity), strategy)
-        
+
     # 10. Final Correlations Matrix: 
     # ----------------------------------------------------------------------------------------------
     if CORRELATIONS_MATRIX:
         estimate_correlations_distributed(config, save_path, RNNWF.sample,
                                           lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries, parity=spin_parity),
                                           strategy)
-        
+
     # 11. structure factor from <Si> 
     # ----------------------------------------------------------------------------------------------
     if Sk_from_Si:
-        estimate_Sk_from_Si_distributed(config,save_path,RNNWF.sample,
-                                          lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries, parity=spin_parity),
-                                          strategy)
+        estimate_Sk_from_Si_distributed(config, save_path, RNNWF.sample,
+                                        lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries, parity=spin_parity),
+                                        strategy)
     return RNNWF
-
 
 
 if __name__ == "__main__":
@@ -593,7 +593,7 @@ if __name__ == "__main__":
 
         'ENERGY': True,
         'num_samples_final_energy_estimate': 1000,
-        'CORRELATIONS_MATRIX':True,
+        'CORRELATIONS_MATRIX': True,
         'Sk_from_Si': True,
         'correlation_mode': 'Sxyz',
         'num_samples_final_correlations_estimate': 10000,

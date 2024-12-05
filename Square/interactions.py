@@ -1,5 +1,3 @@
-import numpy as np
-
 def coord_to_site_bravais(L, x, y, snake=False):
     if snake and (y % 2 == 1):
         return L * y + L - x - 1
@@ -40,6 +38,7 @@ def buildlattice_square(Lx, Ly, bc="open", snake=False):
 
     return interactions
 
+
 def buildlattice_alltoall(L, snake=False):
     interactions = []
     N_spins = L ** 2
@@ -55,6 +54,7 @@ def buildlattice_alltoall(L, snake=False):
             interactions.append(interaction)
 
     return interactions
+
 
 def buildlattice_alltoall_primitive_vector(L: int, p1, p2, snake=False, periodic=False):
     interactions = {}
@@ -91,6 +91,7 @@ def buildlattice_alltoall_primitive_vector(L: int, p1, p2, snake=False, periodic
 
     return interactions
 
+
 def generate_sublattices_square(Lx, Ly, snake=False):
     A_coords = []
     B_coords = []
@@ -116,6 +117,7 @@ def generate_sublattices_square(Lx, Ly, snake=False):
                     A_sites.append(coord_fn(nx, ny))
 
     return A_coords, B_coords, A_sites, B_sites
+
 
 def generate_lattices_boundary(Lx, Ly, snake=False):
     corner_coords = []

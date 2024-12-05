@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from interactions import coord_to_site_bravais, buildlattice_alltoall_primitive_vector, buildlattice_alltoall, generate_sublattices_square
+from interactions import buildlattice_alltoall_primitive_vector, buildlattice_alltoall, generate_sublattices_square
 
 default_p1 = (1,0)
 default_p2 = (0,1)
