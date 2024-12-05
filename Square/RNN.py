@@ -1,10 +1,12 @@
-import tensorflow as tf
-import numpy as np
 import random
 from abc import ABC
 
+import numpy as np
+import tensorflow as tf
+
 # from interactions import generate_lattices_boundary, generate_sublattices_square, generate_sublattices_triangular
 from symmetries import get_C2v_square, get_C4v_square, get_C6v_square
+
 
 def get_rnn_cell(name):
     if name == 'MDGRU':
@@ -15,12 +17,13 @@ def get_rnn_cell(name):
         return NotImplementedError
 
 
-class MDGRU(tf.compat.v1.nn.rnn_cell.RNNCell):
+class MDGRU(tf.keras.layers.SimpleRNNCell):
     """
     An implementation of a 2D tensorized GRU RNN cell
     """
+
     def __init__(self, num_units=None, local_hilbert_size=None, name=None, dtype=None):
-        super(MDGRU, self).__init__(name=name)
+        super(MDGRU, self).__init__(units=num_units, name=name)
         # save class variables
         self._input_size = local_hilbert_size
         self._num_units = num_units
@@ -57,20 +60,12 @@ class MDGRU(tf.compat.v1.nn.rnn_cell.RNNCell):
 
     @property
     def input_size(self):
-        return self._input_size 
+        return self._input_size
 
-    @property
-    def state_size(self):
-        return self._state_size
-
-    @property
-    def output_size(self):
-        return self._output_size
-
-    def call(self, inputs, states):
+    def __call__(self, inputs, states):
         inputstate_mul = tf.einsum('ij,ik->ijk', tf.concat((states[0], states[1]), 1),
                                    tf.concat((inputs[0], inputs[1]), 1))
-        
+
         # prepare input linear combination
         # state_mul = tensordot(tf, inputstate_mul, self.W, axes=[[1, 2], [1, 2]])  # [batch_sz, num_units]
         # state_mulg = tensordot(tf, inputstate_mul, self.Wg, axes=[[1, 2], [1, 2]])  # [batch_sz, num_units]
@@ -85,12 +80,13 @@ class MDGRU(tf.compat.v1.nn.rnn_cell.RNNCell):
         return output, new_state
 
 
-class MDPeriodic(tf.compat.v1.nn.rnn_cell.RNNCell):
+class MDPeriodic(tf.keras.layers.SimpleRNNCell):
     """
     An implementation of a 2D periodic GRU RNN cell
     """
+
     def __init__(self, num_units=None, local_hilbert_size=None, name=None, dtype=None):
-        super(MDPeriodic, self).__init__(name=name)
+        super(MDPeriodic, self).__init__(units=num_units, name=name)
         self._input_size = local_hilbert_size
         self._num_units = num_units
         self._state_size = num_units
@@ -126,17 +122,9 @@ class MDPeriodic(tf.compat.v1.nn.rnn_cell.RNNCell):
 
     @property
     def input_size(self):
-        return self._input_size 
+        return self._input_size
 
-    @property
-    def state_size(self):
-        return self._state_size
-
-    @property
-    def output_size(self):
-        return self._output_size
-
-    def call(self, inputs, states):
+    def __call__(self, inputs, states):
         state_mul = tf.matmul(
             tf.concat([inputs[0], inputs[1], inputs[2], inputs[3], states[0], states[1], states[2], states[3]], 1),
             self.W)  # [batch_sz, num_units]
@@ -153,9 +141,9 @@ class MDPeriodic(tf.compat.v1.nn.rnn_cell.RNNCell):
         return output, new_state
 
 
-
 class RNNWavefunction(ABC):
-    def __init__(self, local_hilbert_space: int, num_sites: int, lattice: str, boundary_condition='open', tf_dtype=tf.float32):
+    def __init__(self, local_hilbert_space: int, num_sites: int, lattice: str, boundary_condition='open',
+                 tf_dtype=tf.float32):
         """
         Abstract RNNWavefunction class that contains reusable functions across all RNNs
 
@@ -175,9 +163,10 @@ class RNNWavefunction(ABC):
         if self.local_hilbert_space > 2:
             raise NotImplementedError
         assert lattice in ["Square", "Triangular"], f'Lattice must be "Square" or "Triangular" received {lattice}'
-        assert boundary_condition in ["open", "periodic"], f'Lattice must be "open" or "periodic" received {boundary_condition}'
+        assert boundary_condition in ["open",
+                                      "periodic"], f'Lattice must be "open" or "periodic" received {boundary_condition}'
 
-        if lattice =="Square":
+        if lattice == "Square":
             if boundary_condition == "open":
                 self.apply_symmetries = get_C4v_square(num_sites)
             else:
@@ -271,7 +260,7 @@ class RNNWavefunction(ABC):
             A Tensor of shape (num_samples,) containing the averaged log-probs of the samples.
             A Tensor of shape (num_samples,) containing the averaged log-amplitudes of the samples.
         """
-        
+
         log_probs = tf.reshape(log_probs, (num_symmetries, num_samples))
         log_num_symmetries = tf.math.log(tf.cast(num_symmetries, dtype=log_probs.dtype))
         log_probs = tf.math.reduce_logsumexp(log_probs - log_num_symmetries, axis=0)
@@ -305,16 +294,16 @@ class RNNWavefunction(ABC):
 
 
 class cMDRNNWavefunction(RNNWavefunction):
-    def __init__(self, 
-                 systemsize_x: int, systemsize_y: int, 
+    def __init__(self,
+                 systemsize_x: int, systemsize_y: int,
                  units: int, local_hilbert_space: int = 2,
-                 cell=MDGRU, 
+                 cell=MDGRU,
                  weight_sharing='all',
                  lattice='Square',
                  use_complex=False,
                  h_symmetries=True,
                  seed=111,
-                 kernel_initializer='glorot_uniform', 
+                 kernel_initializer='glorot_uniform',
                  tf_dtype=tf.float32):
 
         """
@@ -417,15 +406,13 @@ class cMDRNNWavefunction(RNNWavefunction):
         for ny in range(-2, self.Ny):  # Loop over the number of sites
             for nx in range(-2, self.Nx + 2):
                 if self.weight_sharing == 'all':
-                    rnn_states[f"{nx}{ny}"] = self.rnn.zero_state(num_samples,
-                                                                  dtype=self.tf_dtype)
+                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_samples)[0]
                 else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].zero_state(num_samples,
-                                                                     dtype=self.tf_dtype)
+                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(num_samples)[0]
                 inputs[f"{nx}{ny}"] = tf.zeros((num_samples, self.local_hilbert_space),
-                                               dtype=self.tf_dtype) 
+                                               dtype=self.tf_dtype)
 
-        # Making a loop over the sites with the 2DRNN
+                # Making a loop over the sites with the 2DRNN
         num_up = tf.zeros(num_samples, dtype=self.tf_dtype)
         num_generated_spins = 0
         for ny in range(self.Ny):
@@ -531,13 +518,11 @@ class cMDRNNWavefunction(RNNWavefunction):
         for ny in range(-2, self.Ny):  # Loop over the number of sites
             for nx in range(-2, self.Nx + 2):
                 if self.weight_sharing == 'all':
-                    rnn_states[f"{nx}{ny}"] = self.rnn.zero_state(num_tot_symmetries * num_samples,
-                                                                  dtype=self.tf_dtype)
+                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_tot_symmetries * num_samples)[0]
                 else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].zero_state(num_tot_symmetries * num_samples,
-                                                                     dtype=self.tf_dtype)
+                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(num_tot_symmetries * num_samples)[0]
                 inputs[f"{nx}{ny}"] = tf.zeros((num_tot_symmetries * num_samples, self.local_hilbert_space),
-                                               dtype=self.tf_dtype) 
+                                               dtype=self.tf_dtype)
 
         probs = [[[] for nx in range(self.Nx)] for ny in range(self.Ny)]
         phases = [[[] for nx in range(self.Nx)] for ny in range(self.Ny)]
@@ -640,18 +625,17 @@ class cMDRNNWavefunction(RNNWavefunction):
 
 
 class periodic_cMDRNNWavefunction(RNNWavefunction):
-    def __init__(self, 
-                 systemsize_x: int, systemsize_y: int, 
+    def __init__(self,
+                 systemsize_x: int, systemsize_y: int,
                  units: int, local_hilbert_space: int = 2,
-                 cell=MDPeriodic, 
+                 cell=MDPeriodic,
                  weight_sharing='all',
                  lattice='Square',
                  use_complex=False,
                  h_symmetries=True,
                  seed=111,
-                 kernel_initializer='glorot_uniform', 
+                 kernel_initializer='glorot_uniform',
                  tf_dtype=tf.float32):
-
 
         """
         systemsize_x, systemsize_y:  integers
@@ -745,9 +729,9 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
         for ny in range(-2, self.Ny):
             for nx in range(-2, self.Nx + 2):
                 if self.weight_sharing == 'all':
-                    rnn_states[f"{nx}{ny}"] = self.rnn.zero_state(num_samples, dtype=self.tf_dtype)
+                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_samples)[0]
                 else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].zero_state(num_samples, dtype=self.tf_dtype)
+                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(num_samples, dtype=self.tf_dtype)[0]
                 inputs[f"{nx}{ny}"] = tf.zeros((num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
 
@@ -867,7 +851,7 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
         for ny in range(-2, self.Ny):
             for nx in range(-2, self.Nx + 2):
                 if self.weight_sharing == 'all':
-                    rnn_states[f"{nx}{ny}"] = self.rnn.zero_state(num_tot_symmetries * num_samples, dtype=self.tf_dtype)
+                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_tot_symmetries * num_samples)[0]
                 else:
                     rnn_states[f"{nx}{ny}"] = self.rnn[0].zero_state(num_tot_symmetries * num_samples,
                                                                      dtype=self.tf_dtype)
@@ -978,12 +962,14 @@ if __name__ == '__main__':
 
     print("Test normalization")
 
+
     def tf_integer_to_binary(integer, bitsize: int, axis=1):
         return tf.reverse(tf.math.mod(tf.bitwise.right_shift(tf.expand_dims(integer, 1), tf.range(bitsize)), 2), [axis])
 
+
     Lx = 4
     Ly = 4
-    Nspins = Lx*Ly
+    Nspins = Lx * Ly
     tf_dtype = tf.float32
     indices = tf.range(0, 2 ** Nspins)
     all_states = tf.cast(tf_integer_to_binary(indices, Nspins), dtype=tf_dtype)
@@ -991,12 +977,12 @@ if __name__ == '__main__':
     bc = 'periodic'
 
     if bc == 'periodic':
-        cell = get_rnn_cell('MDPeriodic')   
-        rnn = periodic_cMDRNNWavefunction(Lx,Ly,nh)
-    else: # 'open'
+        cell = get_rnn_cell('MDPeriodic')
+        rnn = periodic_cMDRNNWavefunction(Lx, Ly, nh)
+    else:  # 'open'
         cell = get_rnn_cell('MDGRU')
-        rnn = cMDRNNWavefunction(Lx,Ly,nh)
+        rnn = cMDRNNWavefunction(Lx, Ly, nh)
 
-    log_p,log_amp = rnn.log_probsamps(all_states,symmetrize=False,parity=False)
+    log_p, log_amp = rnn.log_probsamps(all_states, symmetrize=False, parity=False)
     print(tf.reduce_sum(tf.math.exp(log_p)))
     print(tf.norm(tf.math.exp(log_amp)))
