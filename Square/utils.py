@@ -45,10 +45,10 @@ def get_train_method(T0: float, h_symmetries: bool, l_symmetries: bool) -> str:
 
 
 def data_saver(config, train_method: str, N: int, data_path_prepend, task_id=0):
-    hamiltonian = config['Hamiltonian'] + \
-                  f'{"_periodic/" if config.get("boundary_condition", "open") == "periodic" else ""}' \
-                  + f'/Square{"_no_MS" if not config["Apply_MS"] else ""}{"_triMS" if config.get("tri_MS", False) else ""}/'
-    datapath = f'{data_path_prepend}/{hamiltonian}'
+    hamiltonian = config['Hamiltonian'] 
+    lattice = f'Square{"_no_MS" if not config["Apply_MS"] else ""}' \
+                  + f'{"/periodic" if config.get("boundary_condition", "open") == "periodic" else "/open"}'
+    datapath = f'{data_path_prepend}/{hamiltonian}/{lattice}/'
     experiment_name = config['experiment_name']
     size = f'/N_{N}'
     train_method = f'/{train_method}'
