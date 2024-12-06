@@ -126,7 +126,7 @@ if __name__ == '__main__':
     bc = args.bc
     MS = (args.ms == "1")
     use_complex = 0 
-    data_path_prepend = './data'
+    data_path_prepend = '/mnt/ceph/users/smoss/HeisenbergRNN'
     l_symmetries = (args.lsym == "1")
     schedule = args.schedule
 
