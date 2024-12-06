@@ -119,7 +119,7 @@ def train_(config: dict):
         return save_path
     else:
         save_path = data_saver(config, train_method, N_spins, data_path_prepend=data_path_prepend, task_id=task_id)
-    print("\nsave_path:", save_path)
+    print("save_path:", save_path)
 
     sync = int(sum(sync_function(strategy)().numpy().tolist()))
     print(f"\nSync {sync} devices")
@@ -161,7 +161,7 @@ def train_(config: dict):
 
     ckpt_path = save_path
     sync = int(sum(sync_function(strategy)().numpy().tolist()))
-    print(f"\nSync {sync} devices")
+    print(f"Sync {sync} devices\n")
 
     if task_id > 0:  # if we have multiple workers, create temporary checkpoint paths
         files = os.listdir(save_path)
@@ -175,11 +175,10 @@ def train_(config: dict):
         ckpt_path = save_path + f'/tmp_{task_id}/'
 
     sync = int(sum(sync_function(strategy)().numpy().tolist()))
-    print(f"\nSync {sync} devices")
+    print(f"Sync {sync} devices")
 
     # 3. Print relevant information:
     # ----------------------------------------------------------------------------------------------
-    print("\n\n")
     print(f"Tensorflow version {tf.__version__}")
     print(f"Boundary condition = {boundary_condition}")
     print("Number of spins =", N_spins)
@@ -257,12 +256,8 @@ def train_(config: dict):
     # Creating the optimizer
     # The optimizer has to be created within the strategy scope
     with strategy.scope():
-        if lr_schedule is not None:
-            print(f'Custom learning rate schedule {lr_schedule}')
-            optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, )
-        else:
-            print('Fixed learning rate')
-            optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        print(f'Custom learning rate schedule {lr_schedule}')
+        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, )
 
     if gradient_clip:
         print('Gradient clipping is enabled.')
@@ -417,6 +412,7 @@ def train_(config: dict):
             time_per_step = time.time() - start
             cost_np = cost.numpy()
             local_energies_np = local_energies.numpy()
+            print(np.mean(local_energies.numpy()))
             log_probs_np = log_probs.numpy().astype(np.complex64)
             T_np = T.numpy()
 
