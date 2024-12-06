@@ -15,7 +15,7 @@ parser.add_argument('--path', default=False, type=bool)
 
 parser.add_argument('--ms', default="1", type=str)
 parser.add_argument('--units', default=256, type=int)
-parser.add_argument('--experiment_name', default='Oct18_scaleTrainProcedure', type=str)
+parser.add_argument('--experiment_name', default='Nov29', type=str)
 parser.add_argument('--bc', default='open', type=str)
 parser.add_argument('--num_anneal', default=10000, type=int)
 parser.add_argument('--scale', default=1.0, type=float)
