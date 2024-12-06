@@ -111,7 +111,7 @@ else:
 from train import train_
 from estimate import estimate_
 
-from utils import LRSchedule_decay, step_schedule_exp_decay
+from utils import LRSchedule_decay, LRSchedule_constant, step_schedule_exp_decay
 
 if __name__ == '__main__':
 
@@ -147,7 +147,7 @@ if __name__ == '__main__':
         'units': units,  # number of memory/hidden units
         'use_complex': use_complex,  # weights shared between RNN cells or not
         'num_samples': num_samples,  # Batch size
-        'lr': 5e-4,  # learning rate
+        'lr': LRSchedule_constant(5e-4),  # learning rate
         'gradient_clip': True,
         'tf_dtype': tf_dtype,
 
@@ -198,7 +198,7 @@ if __name__ == '__main__':
         'units': units,  # number of memory/hidden units
         'use_complex': use_complex,  # weights shared between RNN cells or not
         'num_samples': num_samples,  # Batch size
-        'lr_schedule': LRSchedule_decay(5e-4, 1000 + (5 * int(scale * number_of_annealing_step)),
+        'lr': LRSchedule_decay(5e-4, 1000 + (5 * int(scale * number_of_annealing_step)),
                                         int(scale * lr_decay_rate)),
         'gradient_clip': True,
         'tf_dtype': tf_dtype,
@@ -249,7 +249,7 @@ if __name__ == '__main__':
         'units': units,  # number of memory/hidden units
         'use_complex': use_complex,  # weights shared between RNN cells or not
         'num_samples': num_samples,  # Batch size
-        'lr_schedule': LRSchedule_decay(5e-4, 1000 + (5 * int(scale * number_of_annealing_step)),
+        'lr': LRSchedule_decay(5e-4, 1000 + (5 * int(scale * number_of_annealing_step)),
                                         int(scale * lr_decay_rate)),
         'gradient_clip': True,
         'tf_dtype': tf_dtype,
@@ -291,9 +291,7 @@ if __name__ == '__main__':
             new_conf["previous_config"] = new_conf.copy()
             new_conf["Nx"] = _L
             new_conf["Ny"] = _L
-            new_conf["lr"] = 1e-5
-            if 'lr_schedule' in new_conf.keys():
-                new_conf.pop('lr_schedule')
+            new_conf["lr"] = LRSchedule_constant(1e-5)
             new_conf["num_training_steps"] = int(scale * _ns)
             configs.append(new_conf.copy())
 
@@ -306,9 +304,7 @@ if __name__ == '__main__':
             new_conf["previous_config"] = new_conf.copy()
             new_conf["Nx"] = _L
             new_conf["Ny"] = _L
-            new_conf["lr"] = 1e-5
-            if 'lr_schedule' in new_conf.keys():
-                new_conf.pop('lr_schedule')
+            new_conf["lr"] = LRSchedule_constant(1e-5 )
             new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
             configs.append(new_conf.copy())
 

@@ -88,13 +88,11 @@ def train_(config: dict):
     use_complex = config.get('use_complex', False)
     num_samples = config['num_samples']
     lr = config.get('lr', 5e-4)
-    lr_schedule = config.get('lr_schedule', None)
     gradient_clip = config.get('gradient_clip', False)
     tf_dtype = config.get('tf_dtype', tf.float32)
-    if lr_schedule is not None:
-        assert isinstance(lr_schedule, tf.keras.optimizers.schedules.LearningRateSchedule), \
-            '`lr_schedule` to be an instance of `tf.keras.optimizers.schedules.LearningRateSchedule`, ' \
-            f'received {type(lr_schedule)}'
+    assert isinstance(lr, tf.keras.optimizers.schedules.LearningRateSchedule), \
+            '`lr` to be an instance of `tf.keras.optimizers.schedules.LearningRateSchedule`, ' \
+            f'received {lr}'
     kernel_initializer = config.get('kernel_initializer', 'glorot_uniform')
 
     #### Annealing ####
@@ -256,8 +254,8 @@ def train_(config: dict):
     # Creating the optimizer
     # The optimizer has to be created within the strategy scope
     with strategy.scope():
-        print(f'Custom learning rate schedule {lr_schedule}')
-        optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, )
+        print(f'Learning rate schedule {lr}')
+        optimizer = tf.keras.optimizers.Adam(learning_rate=lr, )
 
     if gradient_clip:
         print('Gradient clipping is enabled.')
@@ -429,10 +427,6 @@ def train_(config: dict):
                 print(f'#samples {num_samples}, #Training step {it}')
                 print("Temperature: ", T_np)
                 print(f"Time per step: {time_per_step}")
-                if lr_schedule is not None:
-                    print(f"Learning rate {lr_schedule(it)}")
-                else:
-                    print(f"Learning rate {lr}\n")
 
             if CKPT and (int(it) % 100 == 0):
                 if np.isnan(logger.data["meanEnergy"][-1]):
