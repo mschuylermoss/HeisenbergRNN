@@ -28,46 +28,37 @@ class MDGRU(tf.keras.layers.SimpleRNNCell):
         self._num_units = num_units
         self._state_size = num_units
         self._output_size = local_hilbert_size
-        kernel_initializer = tf.keras.initializers.VarianceScaling(scale=1.0,
-                                                                   mode="fan_avg",
-                                                                   distribution="uniform")
+        self._dtype = dtype
+        self.kernel_initializer = tf.keras.initializers.VarianceScaling(scale=1.0,
+                                                                        mode="fan_avg",
+                                                                        distribution="uniform")
 
-        self.W = tf.compat.v1.get_variable("W_" + name, shape=[num_units, 2 * num_units, 2 * self._input_size],
-                                           initializer=kernel_initializer,
-                                           dtype=dtype)
+    def build(self, input_shape):
+        self.W = self.add_weight(name="W_" + self.name, shape=[self.units, 2 * self.units, 2 * self._input_size],
+                                 initializer=self.kernel_initializer,
+                                 dtype=self.dtype)
 
-        self.b = tf.compat.v1.get_variable("b_" + name, shape=[num_units],
-                                           initializer=kernel_initializer,
-                                           dtype=dtype)
+        self.b = self.add_weight(name="b_" + self.name, shape=[self.units],
+                                 initializer=self.kernel_initializer,
+                                 dtype=self.dtype)
 
-        self.Wg = tf.compat.v1.get_variable("Wg_" + name, shape=[num_units, 2 * num_units, 2 * self._input_size],
-                                            initializer=kernel_initializer,
-                                            dtype=dtype)
+        self.Wg = self.add_weight(name="Wg_" + self.name, shape=[self.units, 2 * self.units, 2 * self._input_size],
+                                  initializer=self.kernel_initializer,
+                                  dtype=self.dtype)
 
-        self.bg = tf.compat.v1.get_variable("bg_" + name, shape=[num_units],
-                                            initializer=kernel_initializer,
-                                            dtype=dtype)
+        self.bg = self.add_weight(name="bg_" + self.name, shape=[self.units],
+                                  initializer=self.kernel_initializer,
+                                  dtype=self.dtype)
 
-        self.Wmerge = tf.compat.v1.get_variable("Wmerge_" + name, shape=[2 * num_units, num_units],
-                                                initializer=kernel_initializer,
-                                                dtype=dtype)
+        self.Wmerge = self.add_weight(name="Wmerge_" + self.name, shape=[2 * self.units, self.units],
+                                      initializer=self.kernel_initializer,
+                                      dtype=self.dtype)
 
-    # needed properties
-    @property
-    def trainable_variables(self):
-        return [self.W, self.b, self.Wg, self.bg, self.Wmerge]
-
-    @property
-    def input_size(self):
-        return self._input_size
-
-    def __call__(self, inputs, states):
+    def call(self, inputs, states, training=False):
         inputstate_mul = tf.einsum('ij,ik->ijk', tf.concat((states[0], states[1]), 1),
                                    tf.concat((inputs[0], inputs[1]), 1))
 
         # prepare input linear combination
-        # state_mul = tensordot(tf, inputstate_mul, self.W, axes=[[1, 2], [1, 2]])  # [batch_sz, num_units]
-        # state_mulg = tensordot(tf, inputstate_mul, self.Wg, axes=[[1, 2], [1, 2]])  # [batch_sz, num_units]
         state_mul = tf.einsum('ijk,ajk -> ia', inputstate_mul, self.W)
         state_mulg = tf.einsum('ijk,ajk -> ia', inputstate_mul, self.Wg)
 
@@ -90,40 +81,33 @@ class MDPeriodic(tf.keras.layers.SimpleRNNCell):
         self._num_units = num_units
         self._state_size = num_units
         self._output_size = local_hilbert_size
-        kernel_initializer = tf.keras.initializers.VarianceScaling(scale=1.0,
-                                                                   mode="fan_avg",
-                                                                   distribution="uniform")
+        self._dtype = dtype
+        self.kernel_initializer = tf.keras.initializers.VarianceScaling(scale=1.0,
+                                                                        mode="fan_avg",
+                                                                        distribution="uniform")
 
-        self.W = tf.compat.v1.get_variable("W_" + name, shape=[4 * (num_units + self._input_size), num_units],
-                                           initializer=kernel_initializer,
-                                           dtype=dtype)
+    def build(self, input_shape):
+        self.W = self.add_weight(name="W_" + self.name, shape=[4 * (self.units + self._input_size), self.units],
+                                 initializer=self.kernel_initializer,
+                                 dtype=self.dtype)
 
-        self.b = tf.compat.v1.get_variable("b_" + name, shape=[num_units],
-                                           initializer=kernel_initializer,
-                                           dtype=dtype)
+        self.b = self.add_weight(name="b_" + self.name, shape=[self.units],
+                                 initializer=self.kernel_initializer,
+                                 dtype=self.dtype)
 
-        self.Wg = tf.compat.v1.get_variable("Wg_" + name, shape=[4 * (num_units + self._input_size), num_units],
-                                            initializer=kernel_initializer,
-                                            dtype=dtype)
+        self.Wg = self.add_weight(name="Wg_" + self.name, shape=[4 * (self.units + self._input_size), self.units],
+                                  initializer=self.kernel_initializer,
+                                  dtype=self.dtype)
 
-        self.bg = tf.compat.v1.get_variable("bg_" + name, shape=[num_units],
-                                            initializer=kernel_initializer,
-                                            dtype=dtype)
+        self.bg = self.add_weight(name="bg_" + self.name, shape=[self.units],
+                                  initializer=self.kernel_initializer,
+                                  dtype=self.dtype)
 
-        self.Wmerge = tf.compat.v1.get_variable("Wmerge_" + name, shape=[4 * num_units, num_units],
-                                                initializer=kernel_initializer,
-                                                dtype=dtype)
+        self.Wmerge = self.add_weight(name="Wmerge_" + self.name, shape=[4 * self.units, self.units],
+                                      initializer=self.kernel_initializer,
+                                      dtype=self.dtype)
 
-    # needed properties
-    @property
-    def trainable_variables(self):
-        return [self.W, self.b, self.Wg, self.bg, self.Wmerge]
-
-    @property
-    def input_size(self):
-        return self._input_size
-
-    def __call__(self, inputs, states):
+    def call(self, inputs, states, training=False):
         state_mul = tf.matmul(
             tf.concat([inputs[0], inputs[1], inputs[2], inputs[3], states[0], states[1], states[2], states[3]], 1),
             self.W)  # [batch_sz, num_units]
@@ -255,11 +239,6 @@ class RNNWavefunction(ABC):
         log_num_symmetries = tf.math.log(tf.cast(num_symmetries, dtype=log_probs.dtype))
         log_probs = tf.math.reduce_logsumexp(log_probs - log_num_symmetries, axis=0)
 
-        # exp_phases = tf.reshape(tf.complex(tf.cos(log_phases), tf.sin(log_phases)), (num_symmetries, num_samples))
-        # real_avg = self.regularized_identity(tf.math.real(tf.reduce_sum(exp_phases, axis=0)))
-        # imag_avg = tf.math.imag(tf.reduce_sum(exp_phases, axis=0))
-        # phases = tf.math.imag(tf.math.log(tf.complex(real_avg, imag_avg)))
-
         return log_probs, tf.complex(0.5 * log_probs, tf.reshape(total_phases, (num_symmetries, num_samples))[0])
 
     def softsign(self, inputs):
@@ -369,8 +348,8 @@ class cMDRNNWavefunction(RNNWavefunction):
             if ny % 2 == 0:
                 for nx in range(self.Nx):  # left to right
 
-                    neighbor_inputs = (inputs[f"{nx - 1}{ny}"], inputs[f"{nx}{ny - 1}"])
-                    neighbor_states = (rnn_states[f"{nx - 1}{ny}"], rnn_states[f"{nx}{ny - 1}"])
+                    neighbor_inputs = [inputs[f"{nx - 1}{ny}"], inputs[f"{nx}{ny - 1}"]]
+                    neighbor_states = [rnn_states[f"{nx - 1}{ny}"], rnn_states[f"{nx}{ny - 1}"]]
 
                     rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
                     output_ampl = self.dense(rnn_output)
@@ -627,12 +606,10 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
         for ny in range(self.Ny):
             if ny % 2 == 0:
                 for nx in range(self.Nx):  # left to right
-                    # print(nx,ny)
-
-                    neighbor_inputs = [inputs[f"{nx - 1}{ny}"], inputs[f"{nx}{ny - 1}"],
-                                       inputs[f"{(nx + 1) % self.Nx}{ny}"], inputs[f"{nx}{(ny + 1) % self.Ny}"]]
-                    neighbor_states = [rnn_states[f"{nx - 1}{ny}"], rnn_states[f"{nx}{ny - 1}"],
-                                       rnn_states[f"{(nx + 1) % self.Nx}{ny}"], rnn_states[f"{nx}{(ny + 1) % self.Ny}"]]
+                    neighbor_inputs = (inputs[f"{nx - 1}{ny}"], inputs[f"{nx}{ny - 1}"],
+                                       inputs[f"{(nx + 1) % self.Nx}{ny}"], inputs[f"{nx}{(ny + 1) % self.Ny}"])
+                    neighbor_states = (rnn_states[f"{nx - 1}{ny}"], rnn_states[f"{nx}{ny - 1}"],
+                                       rnn_states[f"{(nx + 1) % self.Nx}{ny}"], rnn_states[f"{nx}{(ny + 1) % self.Ny}"])
 
                     rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
                     output_ampl = self.dense(rnn_output)
@@ -656,8 +633,6 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
 
             if ny % 2 == 1:
                 for nx in range(self.Nx - 1, -1, -1):  # right to left
-                    # print(nx,ny)
-
                     neighbor_inputs = [inputs[f"{nx + 1}{ny}"], inputs[f"{nx}{ny - 1}"],
                                        inputs[f"{(nx + 1) % self.Nx}{ny}"], inputs[f"{nx}{(ny + 1) % self.Ny}"]]
                     neighbor_states = [rnn_states[f"{nx + 1}{ny}"], rnn_states[f"{nx}{ny - 1}"],
@@ -765,7 +740,6 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
 
             if ny % 2 == 1:
                 for nx in range(self.Nx - 1, -1, -1):  # right to left
-                    # print(nx,ny)
 
                     neighbor_inputs = [inputs[f"{nx + 1}{ny}"], inputs[f"{nx}{ny - 1}"],
                                        inputs[f"{(nx + 1) % self.Nx}{ny}"], inputs[f"{nx}{(ny + 1) % self.Ny}"]]
