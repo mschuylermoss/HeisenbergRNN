@@ -412,7 +412,6 @@ def train_(config: dict):
             time_per_step = time.time() - start
             cost_np = cost.numpy()
             local_energies_np = local_energies.numpy()
-            print(np.mean(local_energies.numpy()))
             log_probs_np = log_probs.numpy().astype(np.complex64)
             T_np = T.numpy()
 
