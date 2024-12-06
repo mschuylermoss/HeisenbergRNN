@@ -1,7 +1,7 @@
 # #!/bin/bash
 
 ######## Training with different scales and rates for enlarging scheme
-for rate in 0.475;  #0.25;
+for rate in 0.475 0.25;
     do
     exp_name='Nov29'
 
@@ -9,8 +9,8 @@ for rate in 0.475;  #0.25;
     X="p|$rate"
     sbatch -J "$X" run.sh $exp_name $bc $rate
 
-#    bc='open'
-#    X="o|$rate"
-#    sbatch -J "$X" --export="exp_name=$exp_name,bc=$bc,rate=$rate" run.sh
+    bc='open'
+    X="o|$rate"
+    sbatch -J "$X" --export="exp_name=$exp_name,bc=$bc,rate=$rate" run.sh
 
 done
