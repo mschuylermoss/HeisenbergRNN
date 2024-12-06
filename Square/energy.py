@@ -4,7 +4,6 @@ import tensorflow as tf
 
 def get_Heisenberg_Energy_Vectorized_square(J, interactions, log_fxn, marshall_sign=False, symmetrize=False,
                                             parity=False, tf_dtype=tf.float32):
-    
     print("getting energy function!")
 
     if marshall_sign:
@@ -15,7 +14,7 @@ def get_Heisenberg_Energy_Vectorized_square(J, interactions, log_fxn, marshall_s
         print("Marshall Sign not applied!")
 
     np_interactions = np.array(interactions)
-    Nspins = max(max(np_interactions[:,0]),max(np_interactions[:,1])) + 1
+    Nspins = max(max(np_interactions[:, 0]), max(np_interactions[:, 1])) + 1
     J_mat_s = np.zeros((len(interactions), Nspins))
     for n, interaction in enumerate(interactions):
         i, j = interaction
@@ -24,7 +23,7 @@ def get_Heisenberg_Energy_Vectorized_square(J, interactions, log_fxn, marshall_s
 
     J_matrix = tf.constant(J_mat_s, dtype=tf_dtype)
     J_tf = tf.complex(tf.cast(J, dtype=tf_dtype), tf.cast(0.0, dtype=tf_dtype))
-    
+
     @tf.function()
     def Heisenberg_Energy_Vectorized_tf_function_square(samples, og_amps):
         N = tf.shape(samples)[1]
@@ -46,4 +45,3 @@ def get_Heisenberg_Energy_Vectorized_square(J, interactions, log_fxn, marshall_s
         return Energies
 
     return Heisenberg_Energy_Vectorized_tf_function_square
-

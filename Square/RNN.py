@@ -4,8 +4,7 @@ from abc import ABC
 import numpy as np
 import tensorflow as tf
 
-# from interactions import generate_lattices_boundary, generate_sublattices_square, generate_sublattices_triangular
-from symmetries import get_C2v_square, get_C4v_square, get_C6v_square
+from symmetries import get_C4v_square
 
 
 def get_rnn_cell(name):
@@ -142,7 +141,7 @@ class MDPeriodic(tf.keras.layers.SimpleRNNCell):
 
 
 class RNNWavefunction(ABC):
-    def __init__(self, local_hilbert_space: int, num_sites: int, lattice: str, boundary_condition='open',
+    def __init__(self, local_hilbert_space: int, num_sites: int, boundary_condition='open',
                  tf_dtype=tf.float32):
         """
         Abstract RNNWavefunction class that contains reusable functions across all RNNs
@@ -150,7 +149,6 @@ class RNNWavefunction(ABC):
         Args:
             local_hilbert_space: The local Hilbert space per RNN cell or "super site"
             num_sites: The number of sites in the lattice
-            lattice: what kind of lattice, determines which symmetries to get
             boundary condition: what kind of boundary conditions, determines which RNN subclass to use
             tf_dtype: tensorflow data type to be used in the RNN 
 
@@ -159,23 +157,15 @@ class RNNWavefunction(ABC):
         self.local_hilbert_space = local_hilbert_space
         self.N_spins = num_sites
         self.tf_dtype = tf_dtype
-        self.lattice = lattice
         if self.local_hilbert_space > 2:
             raise NotImplementedError
-        assert lattice in ["Square", "Triangular"], f'Lattice must be "Square" or "Triangular" received {lattice}'
         assert boundary_condition in ["open",
                                       "periodic"], f'Lattice must be "open" or "periodic" received {boundary_condition}'
 
-        if lattice == "Square":
-            if boundary_condition == "open":
-                self.apply_symmetries = get_C4v_square(num_sites)
-            else:
-                self.apply_symmetries = get_C4v_square(num_sites)
-        elif lattice == "Triangular":
-            if boundary_condition == "open":
-                self.apply_symmetries = get_C2v_square(num_sites)
-            else:
-                self.apply_symmetries = get_C6v_square(num_sites)
+        if boundary_condition == "open":
+            self.apply_symmetries = get_C4v_square(num_sites)
+        else:
+            self.apply_symmetries = get_C4v_square(num_sites)
 
         tf.keras.backend.set_floatx(tf_dtype.name)
 
@@ -298,8 +288,6 @@ class cMDRNNWavefunction(RNNWavefunction):
                  systemsize_x: int, systemsize_y: int,
                  units: int, local_hilbert_space: int = 2,
                  cell=MDGRU,
-                 weight_sharing='all',
-                 lattice='Square',
                  use_complex=False,
                  h_symmetries=True,
                  seed=111,
@@ -318,19 +306,12 @@ class cMDRNNWavefunction(RNNWavefunction):
         cell:        a tensorflow RNN cell
         activation:  activation of the RNN cell
         seed:        pseudo-random number generator
-        weight_sharing: str
-                     determines whether the weights of each RNN cell
-                     are shared across the lattice (translational
-                     invariance)
         h_symmetries: bool
                      determines whether HAMILTONIAN symmetries are
                      enforced during the sampling step
         l_symmetries: bool
                      determines whether LATTICE symmetries are
                      enforced during the sampling step
-        lattice:    str
-                     the lattice of the system we are working with
-                     determines which lattice symmetries to implement
         kernel_initializer: str
                      indicates how the model is initialized
         """
@@ -338,54 +319,25 @@ class cMDRNNWavefunction(RNNWavefunction):
         self.Nx = systemsize_x
         self.Ny = systemsize_y
 
-        super().__init__(local_hilbert_space, self.Nx * self.Ny, lattice, 'open', tf_dtype)
+        super().__init__(local_hilbert_space, self.Nx * self.Ny, 'open', tf_dtype)
 
-        self.weight_sharing = weight_sharing
-        assert self.weight_sharing in ['all', 'sublattice', 'boundary'], \
-            'weight_sharing must be on of `all`, `sublattice` or `boundary`'
         self.use_complex = use_complex
         self.h_symmetries = h_symmetries
-        self.lattice = lattice
         self.log_cutoff = 1e-10
 
         random.seed(seed)  # `python` built-in pseudo-random generator
         np.random.seed(seed)  # numpy pseudo-random generator
         tf.random.set_seed(seed)  # tensorflow pseudo-random generator
 
-        if self.weight_sharing == 'all':
-            self.rnn = cell(num_units=units, local_hilbert_size=local_hilbert_space, name=f"RNN", dtype=self.tf_dtype)
-            self.dense = tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense', dtype=self.tf_dtype,
-                                               kernel_initializer=kernel_initializer,
-                                               bias_initializer=kernel_initializer)
-            if self.use_complex:
-                self.dense_phase = tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense_phase',
-                                                         dtype=self.tf_dtype,
-                                                         kernel_initializer=kernel_initializer,
-                                                         bias_initializer=kernel_initializer)
-        else:
-            if self.weight_sharing == 'sublattice':
-                A_lattice, B_lattice, C_lattice, _, _, _ = generate_sublattices_triangular(systemsize_x, systemsize_x,
-                                                                                           snake=False)
-            elif self.weight_sharing == 'boundary':
-                A_lattice, B_lattice, C_lattice, _, _, _ = generate_lattices_boundary(systemsize_x, systemsize_x,
-                                                                                      snake=False)
-            map_A = dict(zip(A_lattice, [0] * len(A_lattice)))
-            map_B = dict(zip(B_lattice, [1] * len(B_lattice)))
-            map_C = dict(zip(C_lattice, [2] * len(C_lattice)))
-
-            self.lattice_map = map_A | map_B | map_C
-
-            self.rnn = [
-                cell(num_units=units, local_hilbert_size=local_hilbert_space, name=f"RNN_{0}_{i}",
-                     dtype=self.tf_dtype) for i in range(3)]
-            self.dense = [tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense_{i}', dtype=self.tf_dtype,
-                                                kernel_initializer=kernel_initializer) for
-                          i in range(3)]
-            if self.use_complex:
-                self.dense_phase = [
-                    tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense_phase_{i}', dtype=self.tf_dtype,
-                                          kernel_initializer=kernel_initializer)
-                    for i in range(3)]
+        self.rnn = cell(num_units=units, local_hilbert_size=local_hilbert_space, name=f"RNN", dtype=self.tf_dtype)
+        self.dense = tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense', dtype=self.tf_dtype,
+                                           kernel_initializer=kernel_initializer,
+                                           bias_initializer=kernel_initializer)
+        if self.use_complex:
+            self.dense_phase = tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense_phase',
+                                                     dtype=self.tf_dtype,
+                                                     kernel_initializer=kernel_initializer,
+                                                     bias_initializer=kernel_initializer)
 
     def sample(self, num_samples):
 
@@ -405,10 +357,7 @@ class cMDRNNWavefunction(RNNWavefunction):
         inputs = {}
         for ny in range(-2, self.Ny):  # Loop over the number of sites
             for nx in range(-2, self.Nx + 2):
-                if self.weight_sharing == 'all':
-                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_samples)[0]
-                else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(num_samples)[0]
+                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_samples)[0]
                 inputs[f"{nx}{ny}"] = tf.zeros((num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
 
@@ -423,14 +372,8 @@ class cMDRNNWavefunction(RNNWavefunction):
                     neighbor_inputs = (inputs[f"{nx - 1}{ny}"], inputs[f"{nx}{ny - 1}"])
                     neighbor_states = (rnn_states[f"{nx - 1}{ny}"], rnn_states[f"{nx}{ny - 1}"])
 
-                    if self.weight_sharing == 'all':
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense(rnn_output)
-                    else:
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn[self.lattice_map[(nx, ny)]](
-                            neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense[self.lattice_map[(nx, ny)]](rnn_output)
-
+                    rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
+                    output_ampl = self.dense(rnn_output)
                     output_ampl_softmax = tf.keras.activations.softmax(output_ampl)
 
                     if self.h_symmetries:
@@ -453,14 +396,8 @@ class cMDRNNWavefunction(RNNWavefunction):
                     neighbor_inputs = (inputs[f"{nx + 1}{ny}"], inputs[f"{nx}{ny - 1}"])
                     neighbor_states = (rnn_states[f"{nx + 1}{ny}"], rnn_states[f"{nx}{ny - 1}"])
 
-                    if self.weight_sharing == 'all':
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense(rnn_output)
-                    else:
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn[self.lattice_map[(nx, ny)]](
-                            neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense[self.lattice_map[(nx, ny)]](rnn_output)
-
+                    rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
+                    output_ampl = self.dense(rnn_output)
                     output_ampl_softmax = tf.keras.activations.softmax(output_ampl)
 
                     if self.h_symmetries:
@@ -517,10 +454,7 @@ class cMDRNNWavefunction(RNNWavefunction):
         inputs = {}
         for ny in range(-2, self.Ny):  # Loop over the number of sites
             for nx in range(-2, self.Nx + 2):
-                if self.weight_sharing == 'all':
-                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_tot_symmetries * num_samples)[0]
-                else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(num_tot_symmetries * num_samples)[0]
+                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_tot_symmetries * num_samples)[0]
                 inputs[f"{nx}{ny}"] = tf.zeros((num_tot_symmetries * num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
 
@@ -538,19 +472,10 @@ class cMDRNNWavefunction(RNNWavefunction):
                     neighbor_inputs = (inputs[f"{nx - 1}{ny}"], inputs[f"{nx}{ny - 1}"])
                     neighbor_states = (rnn_states[f"{nx - 1}{ny}"], rnn_states[f"{nx}{ny - 1}"])
 
-                    if self.weight_sharing == 'all':
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense(rnn_output)
-                        if self.use_complex:
-                            output_phase = self.dense_phase(rnn_output)
-                    else:
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn[self.lattice_map[(nx, ny)]](
-                            neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense[self.lattice_map[(nx, ny)]](rnn_output)
-                        if self.use_complex:
-                            output_phase = self.dense_phase[self.lattice_map[(nx, ny)]](rnn_output)
-                        # print((nx,ny),"RNN Cell", self.lattice_map[(nx, ny)])
-
+                    rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
+                    output_ampl = self.dense(rnn_output)
+                    if self.use_complex:
+                        output_phase = self.dense_phase(rnn_output)
                     output_ampl_softmax = tf.keras.activations.softmax(output_ampl)
                     if self.h_symmetries:
                         output_ampl_softmax = self.mag_normalization(output_ampl_softmax, num_up, num_generated_spins)
@@ -574,19 +499,10 @@ class cMDRNNWavefunction(RNNWavefunction):
                     neighbor_inputs = (inputs[f"{nx + 1}{ny}"], inputs[f"{nx}{ny - 1}"])
                     neighbor_states = (rnn_states[f"{nx + 1}{ny}"], rnn_states[f"{nx}{ny - 1}"])
 
-                    if self.weight_sharing == 'all':
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense(rnn_output)
-                        if self.use_complex:
-                            output_phase = self.dense_phase(rnn_output)
-                    else:
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn[self.lattice_map[(nx, ny)]](
-                            neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense[self.lattice_map[(nx, ny)]](rnn_output)
-                        if self.use_complex:
-                            output_phase = self.dense_phase[self.lattice_map[(nx, ny)]](rnn_output)
-                        # print((nx,ny),"RNN Cell", self.lattice_map[(nx, ny)])
-
+                    rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
+                    output_ampl = self.dense(rnn_output)
+                    if self.use_complex:
+                        output_phase = self.dense_phase(rnn_output)
                     output_ampl_softmax = tf.keras.activations.softmax(output_ampl)
                     if self.h_symmetries:
                         output_ampl_softmax = self.mag_normalization(output_ampl_softmax, num_up, num_generated_spins)
@@ -629,8 +545,6 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
                  systemsize_x: int, systemsize_y: int,
                  units: int, local_hilbert_space: int = 2,
                  cell=MDPeriodic,
-                 weight_sharing='all',
-                 lattice='Square',
                  use_complex=False,
                  h_symmetries=True,
                  seed=111,
@@ -648,10 +562,6 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
                      is related to the true lattice of interest)
         cell:        a tensorflow RNN cell
         seed:        pseudo-random number generator
-        weight_sharing: bool
-                     determines whether the weights of each RNN cell
-                     are shared across the lattice
-                     (in the spirit of translational invariance)
         h_symmetries: bool
                      determines whether HAMILTONIAN symmetries are
                      enforced during the sampling step
@@ -670,44 +580,23 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
         self.Nx = systemsize_x
         self.Ny = systemsize_y
 
-        super().__init__(local_hilbert_space, self.Nx * self.Ny, lattice, 'periodic', tf_dtype)
+        super().__init__(local_hilbert_space, self.Nx * self.Ny, 'periodic', tf_dtype)
 
-        self.weight_sharing = weight_sharing
-        assert self.weight_sharing in ['all', 'sublattice', ], \
-            f'weight_sharing must be one of `all` or `sublattice`, received {self.weight_sharing}'
         self.use_complex = use_complex
         self.h_symmetries = h_symmetries
-        self.lattice = lattice
         self.log_cutoff = 1e-10
 
         random.seed(seed)  # `python` built-in pseudo-random generator
         np.random.seed(seed)  # numpy pseudo-random generator
         tf.random.set_seed(seed)  # tensorflow pseudo-random generator
 
-        if self.weight_sharing == 'all':
-            self.rnn = cell(num_units=units, local_hilbert_size=local_hilbert_space, name=f"RNN", dtype=self.tf_dtype)
-            self.dense = tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense', dtype=self.tf_dtype,
-                                               kernel_initializer=kernel_initializer)
-            if self.use_complex:
-                self.dense_phase = tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense_phase',
-                                                         dtype=self.tf_dtype,
-                                                         kernel_initializer=kernel_initializer)
-        elif self.weight_sharing == 'sublattice':
-            A_lattice, B_lattice, C_lattice, _, _, _ = generate_sublattices_triangular(systemsize_x, systemsize_x,
-                                                                                       snake=False)
-            map_A = dict(zip(A_lattice, [0] * len(A_lattice)))
-            map_B = dict(zip(B_lattice, [1] * len(B_lattice)))
-            map_C = dict(zip(C_lattice, [2] * len(C_lattice)))
-            self.lattice_map = map_A | map_B | map_C
-
-            self.rnn = [cell(num_units=units, local_hilbert_size=local_hilbert_space, name=f"RNN_{0}_{i}",
-                             dtype=self.tf_dtype) for i in range(3)]
-            self.dense = [tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense_{i}', dtype=self.tf_dtype,
-                                                kernel_initializer=kernel_initializer) for i in range(3)]
-            if self.use_complex:
-                self.dense_phase = [tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense_phase_{i}',
-                                                          dtype=self.tf_dtype, kernel_initializer=kernel_initializer)
-                                    for i in range(3)]
+        self.rnn = cell(num_units=units, local_hilbert_size=local_hilbert_space, name=f"RNN", dtype=self.tf_dtype)
+        self.dense = tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense', dtype=self.tf_dtype,
+                                           kernel_initializer=kernel_initializer)
+        if self.use_complex:
+            self.dense_phase = tf.keras.layers.Dense(local_hilbert_space, name=f'RNNWF_dense_phase',
+                                                     dtype=self.tf_dtype,
+                                                     kernel_initializer=kernel_initializer)
 
     def sample(self, num_samples):
 
@@ -728,10 +617,7 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
         inputs = {}
         for ny in range(-2, self.Ny):
             for nx in range(-2, self.Nx + 2):
-                if self.weight_sharing == 'all':
-                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_samples)[0]
-                else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(num_samples, dtype=self.tf_dtype)[0]
+                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_samples)[0]
                 inputs[f"{nx}{ny}"] = tf.zeros((num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
 
@@ -748,14 +634,8 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
                     neighbor_states = [rnn_states[f"{nx - 1}{ny}"], rnn_states[f"{nx}{ny - 1}"],
                                        rnn_states[f"{(nx + 1) % self.Nx}{ny}"], rnn_states[f"{nx}{(ny + 1) % self.Ny}"]]
 
-                    if self.weight_sharing == 'all':
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense(rnn_output)
-                    else:
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn[self.lattice_map[(nx, ny)]](
-                            neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense[self.lattice_map[(nx, ny)]](rnn_output)
-
+                    rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
+                    output_ampl = self.dense(rnn_output)
                     output_ampl_softmax = tf.keras.activations.softmax(
                         output_ampl)  # (num_samples, local_Hilbert_space)
 
@@ -783,14 +663,8 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
                     neighbor_states = [rnn_states[f"{nx + 1}{ny}"], rnn_states[f"{nx}{ny - 1}"],
                                        rnn_states[f"{(nx - 1) % self.Nx}{ny}"], rnn_states[f"{nx}{(ny - 1) % self.Ny}"]]
 
-                    if self.weight_sharing == 'all':
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense(rnn_output)
-                    else:
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn[self.lattice_map[(nx, ny)]](
-                            neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense[self.lattice_map[(nx, ny)]](rnn_output)
-
+                    rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
+                    output_ampl = self.dense(rnn_output)
                     output_ampl_softmax = tf.keras.activations.softmax(
                         output_ampl)  # (num_samples, local_Hilbert_space)
 
@@ -850,11 +724,7 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
         inputs = {}
         for ny in range(-2, self.Ny):
             for nx in range(-2, self.Nx + 2):
-                if self.weight_sharing == 'all':
-                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_tot_symmetries * num_samples)[0]
-                else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].zero_state(num_tot_symmetries * num_samples,
-                                                                     dtype=self.tf_dtype)
+                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_tot_symmetries * num_samples)[0]
                 inputs[f"{nx}{ny}"] = tf.zeros((num_tot_symmetries * num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
 
@@ -873,18 +743,10 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
                     neighbor_states = [rnn_states[f"{nx - 1}{ny}"], rnn_states[f"{nx}{ny - 1}"],
                                        rnn_states[f"{(nx + 1) % self.Nx}{ny}"], rnn_states[f"{nx}{(ny + 1) % self.Ny}"]]
 
-                    if self.weight_sharing == 'all':
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense(rnn_output)
-                        if self.use_complex:
-                            output_phase = self.dense_phase(rnn_output)
-                    else:
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn[self.lattice_map[(nx, ny)]](
-                            neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense[self.lattice_map[(nx, ny)]](rnn_output)
-                        if self.use_complex:
-                            output_phase = self.dense_phase[self.lattice_map[(nx, ny)]](rnn_output)
-
+                    rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
+                    output_ampl = self.dense(rnn_output)
+                    if self.use_complex:
+                        output_phase = self.dense_phase(rnn_output)
                     output_ampl_softmax = tf.keras.activations.softmax(output_ampl)
                     if self.h_symmetries:
                         output_ampl_softmax = self.mag_normalization(output_ampl_softmax, num_up, num_generated_spins)
@@ -910,18 +772,10 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
                     neighbor_states = [rnn_states[f"{nx + 1}{ny}"], rnn_states[f"{nx}{ny - 1}"],
                                        rnn_states[f"{(nx - 1) % self.Nx}{ny}"], rnn_states[f"{nx}{(ny - 1) % self.Ny}"]]
 
-                    if self.weight_sharing == 'all':
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense(rnn_output)
-                        if self.use_complex:
-                            output_phase = self.dense_phase(rnn_output)
-                    else:
-                        rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn[self.lattice_map[(nx, ny)]](
-                            neighbor_inputs, neighbor_states)
-                        output_ampl = self.dense[self.lattice_map[(nx, ny)]](rnn_output)
-                        if self.use_complex:
-                            output_phase = self.dense_phase[self.lattice_map[(nx, ny)]](rnn_output)
-
+                    rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
+                    output_ampl = self.dense(rnn_output)
+                    if self.use_complex:
+                        output_phase = self.dense_phase(rnn_output)
                     output_ampl_softmax = tf.keras.activations.softmax(output_ampl)
                     if self.h_symmetries:
                         output_ampl_softmax = self.mag_normalization(output_ampl_softmax, num_up, num_generated_spins)

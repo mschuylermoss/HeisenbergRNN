@@ -1,6 +1,7 @@
-import tensorflow as tf
-import numpy as np
 import os
+
+import numpy as np
+import tensorflow as tf
 
 
 class LRSchedule_constant(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -46,15 +47,12 @@ def get_train_method(T0: float, h_symmetries: bool, l_symmetries: bool) -> str:
 def data_saver(config, train_method: str, N: int, data_path_prepend, task_id=0):
     hamiltonian = config['Hamiltonian'] + \
                   f'{"_periodic/" if config.get("boundary_condition", "open") == "periodic" else ""}' \
-                  + f'/{config["Lattice"]}{"_no_MS" if not config["Apply_MS"] else ""}{"_triMS" if config.get("tri_MS",False) else ""}/'
+                  + f'/Square{"_no_MS" if not config["Apply_MS"] else ""}{"_triMS" if config.get("tri_MS", False) else ""}/'
     datapath = f'{data_path_prepend}/{hamiltonian}'
     experiment_name = config['experiment_name']
     size = f'/N_{N}'
     train_method = f'/{train_method}'
-    weight_sharing = config.get("weight_sharing", 'all')
-    weight_sharing_method = f'_{weight_sharing}' if not weight_sharing == 'all' else ''
-    testing_params = f"/nh{config['units']}_scale{config['scale']}_rate{config['rate']}{weight_sharing_method}"
-    # testing_params = f"/nh{config['units']}_na{config['num_annealing_steps']}{weight_sharing_method}"
+    testing_params = f"/nh{config['units']}_scale{config['scale']}_rate{config['rate']}"
     save_path = datapath + experiment_name + testing_params + size + train_method + f'/seed_{config["seed"]}'
 
     # If multiple workers are active, only make directories in node 0
@@ -69,23 +67,17 @@ def data_saver(config, train_method: str, N: int, data_path_prepend, task_id=0):
             os.makedirs(save_path + f'/tmp_{task_id}/')
     return save_path
 
-def optimizer_initializer(optimizer, strategy):
-    with strategy.scope():
-        fake_var = tf.Variable(1.0)
-    with tf.GradientTape() as tape:
-        fake_loss = tf.reduce_sum(fake_var ** 2)
-    grads = tape.gradient(fake_loss, [fake_var])
-    # Ask the optimizer to apply the processed gradients.
-    optimizer.apply_gradients(zip(grads, [fake_var]))
 
 def sync_function(strategy):
     @tf.function()
     def sync():
         @tf.function()
         def tf_sync_function():
-            return tf.constant([1.,], tf.float32)
+            return tf.constant([1., ], tf.float32)
+
         values = strategy.run(tf_sync_function)
         return strategy.gather(values, axis=0)
+
     return sync
 
 

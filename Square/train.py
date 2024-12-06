@@ -3,7 +3,7 @@ import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 import numpy as np
 
-from utils import data_saver, optimizer_initializer, sync_function, get_train_method
+from utils import data_saver, sync_function, get_train_method
 from RNN import get_rnn_cell, cMDRNNWavefunction, periodic_cMDRNNWavefunction
 from interactions import buildlattice_square
 from energy import get_Heisenberg_Energy_Vectorized_square
@@ -19,7 +19,6 @@ import sys
 
 
 def train_(config: dict):
-
     #### Other ####
     CKPT = config['CKPT']
     WRITE = config['WRITE']
@@ -43,7 +42,7 @@ def train_(config: dict):
         assert xla_flags is not None, 'XLA_FLAGS environment variable not set, use \n' \
                                       '`export XLA_FLAGS=--xla_gpu_cuda_data_dir=/path/to/cuda`\n' \
                                       'before launching program to enable XLA.'
-        
+
     if PRINT:
         print("_" * 25)
         if number_of_available_gpus > 0:
@@ -69,11 +68,10 @@ def train_(config: dict):
     Hamiltonian = config['Hamiltonian']
     boundary_condition = config.get('boundary_condition', 'open')
     Apply_MS = config['Apply_MS']
-    Lattice = config['Lattice']
     Nx = config['Nx']
     Ny = config['Ny']
     N_sites = Nx * Ny
-    N_spins = N_sites 
+    N_spins = N_sites
 
     if (Hamiltonian == 'AFHeisenberg'):
         J = +1
@@ -81,13 +79,12 @@ def train_(config: dict):
         J = -1
     else:
         raise ValueError(f'{Hamiltonian} not available.')
-    
+
     #### RNN Parameters ####
     RNN_cell = config.get('RNN_cell', 'MDGRU' if boundary_condition == 'open' else 'MDPeriodic')
     available_RNN_cells = ['MDPeriodic', 'MDGRU']
     assert RNN_cell in available_RNN_cells, f'{RNN_cell} is not a valid RNN_cell, choose one of {available_RNN_cells}'
     units = config['units']
-    weight_sharing = config.get('weight_sharing', 'all')
     use_complex = config.get('use_complex', False)
     num_samples = config['num_samples']
     lr = config.get('lr', 5e-4)
@@ -129,15 +126,15 @@ def train_(config: dict):
 
     previous_config = config.get('previous_config', None)
     if previous_config is not None:
-        scale_ = previous_config.get('scale',None)
-        rate_ = previous_config.get('rate',None)
+        scale_ = previous_config.get('scale', None)
+        rate_ = previous_config.get('rate', None)
         if scale_ == None:
             previous_config['scale'] = config['scale']
         if rate_ == None:
             previous_config['rate'] = config['rate']
 
         previous_N_sites = previous_config['Nx'] * previous_config['Ny']
-        previous_N_spins = previous_N_sites 
+        previous_N_spins = previous_N_sites
         previous_train_method = get_train_method(previous_config['Tmax'],
                                                  previous_config['h_symmetries'],
                                                  previous_config['l_symmetries'])
@@ -166,7 +163,7 @@ def train_(config: dict):
     sync = int(sum(sync_function(strategy)().numpy().tolist()))
     print(f"\nSync {sync} devices")
 
-    if task_id > 0: # if we have multiple workers, create temporary checkpoint paths
+    if task_id > 0:  # if we have multiple workers, create temporary checkpoint paths
         files = os.listdir(save_path)
         files_to_copy = filter(lambda x: (not os.path.isdir(save_path + f'/{x}')) and
                                          (x not in ['config.txt', 'DONE.txt']), files)
@@ -184,7 +181,6 @@ def train_(config: dict):
     # ----------------------------------------------------------------------------------------------
     print("\n\n")
     print(f"Tensorflow version {tf.__version__}")
-    print(f"{Hamiltonian} on {Lattice}")
     print(f"Boundary condition = {boundary_condition}")
     print("Number of spins =", N_spins)
     print(f"Using complex?? {use_complex}")
@@ -215,7 +211,6 @@ def train_(config: dict):
 
     RNN_cell_fun = get_rnn_cell(RNN_cell)
     print(f'RNN_cell = {RNN_cell_fun}\n')
-    print(f'Weight sharing method = {weight_sharing}\n')
     number_of_nodes = strategy.num_replicas_in_sync // len(devices)
     number_of_replicas = strategy.num_replicas_in_sync
     print(f"Number of nodes: {number_of_nodes}")
@@ -224,8 +219,8 @@ def train_(config: dict):
     num_samples_per_device = int(np.ceil(num_samples / number_of_replicas))
     print(f"Number of samples per device: {num_samples_per_device}\n")
 
-    RNN_x = Nx  
-    RNN_y = Ny  
+    RNN_x = Nx
+    RNN_y = Ny
 
     # The model has to be created within the strategy scope
     with strategy.scope():
@@ -236,32 +231,20 @@ def train_(config: dict):
         RNNWF = RNNWF_fun(cell=RNN_cell_fun,
                           systemsize_x=RNN_x, systemsize_y=RNN_y, units=units,
                           local_hilbert_space=local_hilbert_space_size, seed=seed,
-                          weight_sharing=weight_sharing,
                           use_complex=use_complex,
-                          h_symmetries=h_symmetries, lattice=Lattice,
+                          h_symmetries=h_symmetries,
                           kernel_initializer=kernel_initializer,
-                          tf_dtype=tf_dtype) 
-        
+                          tf_dtype=tf_dtype)
+
         test_sample = RNNWF.sample(2)
         test_logpsi = RNNWF.log_probsamps(test_sample, symmetrize=False, parity=False)
 
-    if weight_sharing == 'all':
-        trainable_variables = []
-        trainable_variables.extend(RNNWF.rnn.trainable_variables)
-        trainable_variables.extend(RNNWF.dense.trainable_variables)
-        if use_complex:
-            trainable_variables.extend(RNNWF.dense_phase.trainable_variables)
-        print("Weights are shared")
-    else:
-        trainable_variables = []
-        for cell in RNNWF.rnn:
-            trainable_variables.extend(cell.trainable_variables)
-        for node_dense in RNNWF.dense:
-            trainable_variables.extend(node_dense.trainable_variables)
-        if use_complex:
-            for node_dense in RNNWF.dense:
-                trainable_variables.extend(node_dense.trainable_variables)
-        print(f"Weight sharing method = {weight_sharing}")
+    trainable_variables = []
+    trainable_variables.extend(RNNWF.rnn.trainable_variables)
+    trainable_variables.extend(RNNWF.dense.trainable_variables)
+    if use_complex:
+        trainable_variables.extend(RNNWF.dense_phase.trainable_variables)
+    print("Weights are shared")
 
     variables_names = [v.name for v in trainable_variables]
     variable_sum = 0
@@ -293,19 +276,15 @@ def train_(config: dict):
 
     # 5. Generate list of lattice interactions:
     # ----------------------------------------------------------------------------------------------
-
-    if config['Lattice'] == 'Square':
-        interactions_square = buildlattice_square(Nx, Ny, bc=boundary_condition)
-    else:
-        raise NotImplementedError
+    interactions_square = buildlattice_square(Nx, Ny, bc=boundary_condition)
 
     # 6. Define the training step:
     # ----------------------------------------------------------------------------------------------
     Heisenberg_Energy = get_Heisenberg_Energy_Vectorized_square(J, interactions_square, RNNWF.log_probsamps,
-                                                                    marshall_sign=Apply_MS,
-                                                                    symmetrize=l_symmetries, parity=spin_parity,
-                                                                    tf_dtype=tf_dtype)
-    
+                                                                marshall_sign=Apply_MS,
+                                                                symmetrize=l_symmetries, parity=spin_parity,
+                                                                tf_dtype=tf_dtype)
+
     if TRAIN:
         @tf.function()
         def single_train_step_vmc(temperature):
@@ -353,7 +332,7 @@ def train_(config: dict):
             return strategy.reduce(tf.distribute.ReduceOp.SUM, cost_tf_per_rep, axis=None), \
                 local_energies_tf_per_rep_total, \
                 strategy.gather(log_probs_tf_per_rep, axis=0)
-            
+
     # 7. Start from checkpoint or from scratch:
     # ----------------------------------------------------------------------------------------------
     ckpt = tf.train.Checkpoint(step=global_step, optimizer=optimizer, variables=trainable_variables,
@@ -380,7 +359,6 @@ def train_(config: dict):
         ckpt.restore(manager.latest_checkpoint)
         if manager.latest_checkpoint:
             print("Restored from {}".format(manager.latest_checkpoint))
-            optimizer_initializer(optimizer, strategy)
             print(f"Restored learning rate is {optimizer.learning_rate}.")
             print(f"Continuing at step {ckpt.step.numpy()} with temperature T = {ckpt.temperature.numpy()}")
             assert logger.restore(), 'Failed to load data...'
@@ -403,7 +381,7 @@ def train_(config: dict):
                     with open(save_path + '/DONE.txt', 'w') as file:
                         file.write(f'Completed on {datetime.datetime.today()}')
                 if task_id > 0:  # if we have multiple workers, clean up temporary paths
-                    for attempt in range(1,4):
+                    for attempt in range(1, 4):
                         try:
                             if os.path.exists(ckpt_path):
                                 shutil.rmtree(ckpt_path)
@@ -484,7 +462,6 @@ if __name__ == "__main__":
 
         #### System
         'Hamiltonian': 'AFHeisenberg',
-        'Lattice': 'Square',
         'boundary_condition': 'periodic',
         'Apply_MS': True,
         'Nx': 4,  # number of sites in x-direction

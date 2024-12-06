@@ -126,8 +126,7 @@ if __name__ == '__main__':
     bc = args.bc
     MS = (args.ms == "1")
     use_complex = 0 
-    lattice = 'Square'
-    data_path_prepend = '/ceph/HeisenbergRNN'
+    data_path_prepend = './data'
     l_symmetries = (args.lsym == "1")
     schedule = args.schedule
 
@@ -137,7 +136,6 @@ if __name__ == '__main__':
 
         #### System
         'Hamiltonian': 'AFHeisenberg',
-        'Lattice': lattice,
         'boundary_condition': bc,
         'Apply_MS': MS,
         'Nx': 6,  # number of sites in x-direction
@@ -189,7 +187,6 @@ if __name__ == '__main__':
 
         #### System
         'Hamiltonian': 'AFHeisenberg',
-        'Lattice': lattice,
         'boundary_condition': bc,
         'Apply_MS': MS,
         'Nx': 6,  # number of sites in x-direction
@@ -241,7 +238,6 @@ if __name__ == '__main__':
 
         #### System
         'Hamiltonian': 'AFHeisenberg',
-        'Lattice': lattice,
         'boundary_condition': bc,
         'Apply_MS': MS,
         'Nx': 6,  # number of sites in x-direction

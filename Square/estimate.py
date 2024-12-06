@@ -492,8 +492,6 @@ def estimate_Sk_from_Si_distributed(config, save_path, sample_fxn, log_fxn, stra
 def estimate_(config: dict):
     print("\nEstimating...")
 
-    lattice = config.get('Lattice')
-
     RNNWF, energy_function, strategy = train_(config)
     Nx = config['Nx']
     Ny = config['Ny']
@@ -554,7 +552,6 @@ if __name__ == "__main__":
 
         #### System
         'Hamiltonian': 'AFHeisenberg',
-        'Lattice': 'Square',
         'boundary_condition': 'periodic',
         'Apply_MS': True,
         'Nx': 4,  # number of sites in x-direction
