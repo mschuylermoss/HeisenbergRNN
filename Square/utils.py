@@ -59,9 +59,10 @@ def data_saver(config, train_method: str, N: int, data_path_prepend, task_id=0):
     if task_id == 0:
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-        with open(save_path + '/config.txt', 'w') as file:
-            for k, v in config.items():
-                file.write(k + f'={v}\n')
+        if not os.path.exists(save_path + '/config.txt'):
+            with open(save_path + '/config.txt', 'w') as file:
+                for k, v in config.items():
+                    file.write(k + f'={v}\n')
     elif task_id > 0:
         if not os.path.exists(save_path + f'/tmp_{task_id}/'):
             os.makedirs(save_path + f'/tmp_{task_id}/')
