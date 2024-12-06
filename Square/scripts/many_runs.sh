@@ -3,7 +3,8 @@
 ######## Training with different scales and rates for enlarging scheme
 for rate in 0.475 0.25;
     do
-    exp_name='Nov29'
+
+    exp_name='Dec6'
 
     bc='periodic'
     X="p|$rate"
