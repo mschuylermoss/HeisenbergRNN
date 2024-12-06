@@ -11,6 +11,6 @@ for rate in 0.475 0.25;
 
     bc='open'
     X="o|$rate"
-    sbatch -J "$X" --export="exp_name=$exp_name,bc=$bc,rate=$rate" run.sh
+    sbatch -J "$X" run.sh $exp_name $bc $rate
 
 done
