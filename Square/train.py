@@ -440,11 +440,11 @@ def train_(config: dict):
                     print(f"Learning rate {lr}\n")
 
             if CKPT and (int(it) % 100 == 0):
-                print(f"Saved checkpoint for step {int(it)}: {ckpt_path}")
                 if np.isnan(logger.data["meanEnergy"][-1]):
                     print("NaN detected, not saving checkpoint!")
                     sys.exit(1)
                 manager.save()
+                print(f"Saved checkpoint for step {int(it)}: {ckpt_path}")
                 if task_id == 0:
                     logger.save()
 

@@ -333,7 +333,7 @@ if __name__ == '__main__':
             conf['strategy'] = strategy
             conf['task_id'] = task_id
             conf['CORRELATIONS_MATRIX'] = False
-            conf['Sk_from_Si'] = True
+            conf['Sk_from_Si'] = False
             conf['ENERGY'] = True
             conf['scale'] = scale
             conf['rate'] = rate
