@@ -91,8 +91,8 @@ def train_(config: dict):
     gradient_clip = config.get('gradient_clip', False)
     tf_dtype = config.get('tf_dtype', tf.float32)
     assert isinstance(lr, tf.keras.optimizers.schedules.LearningRateSchedule), \
-            '`lr` to be an instance of `tf.keras.optimizers.schedules.LearningRateSchedule`, ' \
-            f'received {lr}'
+        '`lr` to be an instance of `tf.keras.optimizers.schedules.LearningRateSchedule`, ' \
+        f'received {lr}'
     kernel_initializer = config.get('kernel_initializer', 'glorot_uniform')
 
     #### Annealing ####
@@ -371,6 +371,11 @@ def train_(config: dict):
             it = global_step.numpy()
             if (it - 1) >= num_steps:
                 if not os.path.exists(save_path + '/DONE.txt') and (task_id == 0):
+                    if CKPT:
+                        manager.save()
+                        print(f"Saved checkpoint for step {int(it)}: {ckpt_path}")
+                        if task_id == 0:
+                            logger.save()
                     with open(save_path + '/DONE.txt', 'w') as file:
                         file.write(f'Completed on {datetime.datetime.today()}')
                 if task_id > 0:  # if we have multiple workers, clean up temporary paths
