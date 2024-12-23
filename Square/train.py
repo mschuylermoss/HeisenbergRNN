@@ -30,7 +30,7 @@ def train_(config: dict):
     data_path_prepend = config.get('data_path_prepend', './data/')
     strategy = config.get('strategy', None)
     if not GET_PATH and strategy is None:
-        raise ValueError("Must pass a tensorflow strategy to train_distributed.py")
+        raise ValueError("Must pass a tensorflow strategy to train.py")
     task_id = config.get('task_id', 0)
     gpu_devices = tf.config.list_logical_devices("GPU")
     cpu_devices = tf.config.list_logical_devices("CPU")
@@ -117,7 +117,6 @@ def train_(config: dict):
         return save_path
     else:
         save_path = data_saver(config, train_method, N_spins, data_path_prepend=data_path_prepend, task_id=task_id)
-    print("save_path:", save_path)
 
     sync = int(sum(sync_function(strategy)().numpy().tolist()))
     print(f"\nSync {sync} devices")
@@ -371,11 +370,6 @@ def train_(config: dict):
             it = global_step.numpy()
             if (it - 1) >= num_steps:
                 if not os.path.exists(save_path + '/DONE.txt') and (task_id == 0):
-                    if CKPT:
-                        manager.save()
-                        print(f"Saved checkpoint for step {int(it)}: {ckpt_path}")
-                        if task_id == 0:
-                            logger.save()
                     with open(save_path + '/DONE.txt', 'w') as file:
                         file.write(f'Completed on {datetime.datetime.today()}')
                 if task_id > 0:  # if we have multiple workers, clean up temporary paths
