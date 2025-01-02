@@ -83,6 +83,11 @@ if not path:
     else:
         import tensorflow as tf
 
+        for dev in tf.config.list_physical_devices("GPU"):
+            tf.config.experimental.set_memory_growth(
+                dev, enable=True
+            )
+
         if sys.platform == 'darwin':
             print("Detected MacOS, defaulting to CPU")
             tf.config.set_visible_devices([], "GPU")
