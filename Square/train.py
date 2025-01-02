@@ -1,6 +1,7 @@
 import tensorflow as tf
 
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
+
 import numpy as np
 
 from utils import data_saver, sync_function, get_train_method
@@ -279,26 +280,19 @@ def train_(config: dict):
 
     if TRAIN:
         @tf.function()
-        def single_train_step_vmc(temperature):
+        def single_train_step_vmc():
             print(f"Tracing single train step")
 
             samples_tf = RNNWF.sample(num_samples_per_device)
             with tf.GradientTape() as tape:
                 log_probs_tf, log_amps_tf = RNNWF.log_probsamps(samples_tf, symmetrize=l_symmetries,
                                                                 parity=spin_parity)
-                local_energies_tf = Heisenberg_Energy(samples_tf, log_amps_tf)
+                local_energies_tf = tf.stop_gradient(Heisenberg_Energy(samples_tf, log_amps_tf))
                 cost_term_1 = tf.reduce_mean(
-                    tf.multiply(tf.math.conj(log_amps_tf), tf.stop_gradient(local_energies_tf)))
+                    tf.multiply(tf.math.conj(log_amps_tf), local_energies_tf))
                 cost_term_2 = tf.reduce_mean(tf.math.conj(log_amps_tf)) * tf.reduce_mean(
-                    tf.stop_gradient(local_energies_tf))
+                    local_energies_tf)
                 cost = 2 * tf.math.real(cost_term_1 - cost_term_2)
-
-                if T0 != 0:
-                    entropy = temperature * log_probs_tf
-                    cost_term_3 = tf.reduce_mean(
-                        tf.multiply(log_probs_tf, tf.stop_gradient(entropy))) - tf.reduce_mean(
-                        log_probs_tf) * tf.reduce_mean(tf.stop_gradient(entropy))
-                    cost = cost + cost_term_3
 
             # Crucial to divide by the number of replicas since apply_gradients sums gradients over replicas
             gradients = tape.gradient(cost, trainable_variables)
@@ -311,10 +305,9 @@ def train_(config: dict):
             return cost, local_energies_tf, log_probs_tf
 
         @tf.function()
-        def distributed_train_step_vmc(temperature):
+        def distributed_train_step_vmc():
             print("Tracing distributed train step")
-            cost_tf_per_rep, local_energies_tf_per_rep, log_probs_tf_per_rep = strategy.run(single_train_step_vmc,
-                                                                                            args=(temperature,))
+            cost_tf_per_rep, local_energies_tf_per_rep, log_probs_tf_per_rep = strategy.run(single_train_step_vmc)
             global_step.assign_add(1)
 
             local_energies_tf_per_rep_reduced = strategy.gather(local_energies_tf_per_rep,
@@ -339,7 +332,7 @@ def train_(config: dict):
         # if task_id == 0:
         #     logger.save()
         #     manager.save()
-        print(f"train_distributed.py: checkpoint succesful")
+        print(f"train_distributed.py: checkpoint successful")
         time.sleep(1)
         print(f"train_distributed.py: Sending SIGTERM...")
         signal.raise_signal(signal.SIGTERM)
@@ -405,7 +398,12 @@ def train_(config: dict):
                     print("Standard training")
 
             start = time.time()
-            cost, local_energies, log_probs = distributed_train_step_vmc(T)
+            if it==1:
+                trace_time = time.time()
+            cost, local_energies, log_probs = distributed_train_step_vmc()
+            if it==1:
+                print("Trace time:", time.time() - trace_time)
+            print(f"Step {it}")
             time_per_step = time.time() - start
             cost_np = cost.numpy()
             local_energies_np = local_energies.numpy()
@@ -438,53 +436,3 @@ def train_(config: dict):
 
     return RNNWF, Heisenberg_Energy, strategy
 
-
-if __name__ == "__main__":
-    devices = tf.config.list_logical_devices("CPU")
-    print(devices)
-
-    config_test = {
-        # Seeding for reproducibility purposes
-        'seed': 0,
-        'experiment_name': 'testing',
-
-        #### System
-        'Hamiltonian': 'AFHeisenberg',
-        'boundary_condition': 'periodic',
-        'Apply_MS': True,
-        'Nx': 4,  # number of sites in x-direction
-        'Ny': 4,  # number of sites in the y-direction
-
-        #### RNN
-        'RNN_Type': 'TwoD',
-        'units': 16,  # number of memory/hidden units
-        'use_complex': False,  # weights shared between RNN cells or not
-        'num_samples': 100,  # Batch size
-        'lr': 5e-4,  # learning rate
-        'gradient_clip': True,
-        'tf_dtype': tf.float32,
-
-        #### Annealing
-        'scale': 1.,
-        'rate': 0.25,
-        'Tmax': 0,
-        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
-        'num_annealing_steps': 1000,  # number of annealing steps
-        'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
-        'num_training_steps': 0,  # number of training steps
-
-        #### Symmetries
-        'h_symmetries': True,
-        'l_symmetries': False,
-        'spin_parity': False,
-
-        #### Other
-        'CKPT': True,  # whether to save the model during training
-        'WRITE': True,  # whether to save training data to file
-        'PRINT': True,  # whether to print progress throughout training
-        'TRAIN': True,  # whether to train the model
-
-        'strategy': tf.distribute.OneDeviceStrategy(devices[0].name),
-    }
-
-    train_(config_test)

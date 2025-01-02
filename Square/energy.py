@@ -24,7 +24,7 @@ def get_Heisenberg_Energy_Vectorized_square(J, interactions, log_fxn, marshall_s
     J_matrix = tf.constant(J_mat_s, dtype=tf_dtype)
     J_tf = tf.complex(tf.cast(J, dtype=tf_dtype), tf.cast(0.0, dtype=tf_dtype))
 
-    @tf.function()
+    # @tf.function()
     def Heisenberg_Energy_Vectorized_tf_function_square(samples, og_amps):
         N = tf.shape(samples)[1]
 

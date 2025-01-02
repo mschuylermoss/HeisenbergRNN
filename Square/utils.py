@@ -6,25 +6,23 @@ import tensorflow as tf
 
 class LRSchedule_constant(tf.keras.optimizers.schedules.LearningRateSchedule):
 
-    def __init__(self, initial_learning_rate):
-        self.initial_learning_rate = initial_learning_rate
-        self.learning_rate = initial_learning_rate
+    def __init__(self, initial_learning_rate, dtype=tf.float32):
+        self.initial_learning_rate = tf.constant(initial_learning_rate, dtype=dtype)
 
     def __call__(self, step):
-        return self.learning_rate
+        return self.initial_learning_rate
 
 
 class LRSchedule_decay(tf.keras.optimizers.schedules.LearningRateSchedule):
 
-    def __init__(self, initial_learning_rate, step_start=0, halfrate=5000):
-        self.initial_learning_rate = initial_learning_rate
-        self.learning_rate = initial_learning_rate
-        self.halfrate = halfrate
-        self.step_start = step_start
+    def __init__(self, initial_learning_rate, step_start=0, halfrate=5000, dtype=tf.float32):
+        self.initial_learning_rate = tf.constant(initial_learning_rate, dtype=dtype)
+        self.halfrate = tf.cast(halfrate, dtype=dtype)
+        self.step_start = tf.cast(step_start, dtype=dtype)
 
     def __call__(self, step):
-        self.learning_rate = self.initial_learning_rate * (1. / (1. + (step - self.step_start) / self.halfrate))
-        return self.learning_rate
+        global_step = tf.cast(step, dtype=self.initial_learning_rate.dtype)
+        return self.initial_learning_rate * (1. / (1. + (global_step - self.step_start) / self.halfrate))
 
 
 def get_train_method(T0: float, h_symmetries: bool, l_symmetries: bool) -> str:
@@ -45,9 +43,9 @@ def get_train_method(T0: float, h_symmetries: bool, l_symmetries: bool) -> str:
 
 
 def data_saver(config, train_method: str, N: int, data_path_prepend, task_id=0):
-    hamiltonian = config['Hamiltonian'] 
+    hamiltonian = config['Hamiltonian']
     lattice = f'Square{"_no_MS" if not config["Apply_MS"] else ""}' \
-                  + f'{"/periodic" if config.get("boundary_condition", "open") == "periodic" else "/open"}'
+              + f'{"/periodic" if config.get("boundary_condition", "open") == "periodic" else "/open"}'
     datapath = f'{data_path_prepend}/{hamiltonian}/{lattice}/'
     experiment_name = config['experiment_name']
     size = f'/N_{N}'

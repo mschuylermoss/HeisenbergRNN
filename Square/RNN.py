@@ -336,7 +336,7 @@ class cMDRNNWavefunction(RNNWavefunction):
         inputs = {}
         for ny in range(-2, self.Ny):  # Loop over the number of sites
             for nx in range(-2, self.Nx + 2):
-                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_samples)[0]
+                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(batch_size=num_samples, dtype=self.tf_dtype)
                 inputs[f"{nx}{ny}"] = tf.zeros((num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
 
@@ -433,7 +433,7 @@ class cMDRNNWavefunction(RNNWavefunction):
         inputs = {}
         for ny in range(-2, self.Ny):  # Loop over the number of sites
             for nx in range(-2, self.Nx + 2):
-                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_tot_symmetries * num_samples)[0]
+                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(batch_size=num_tot_symmetries * num_samples, dtype=self.tf_dtype)
                 inputs[f"{nx}{ny}"] = tf.zeros((num_tot_symmetries * num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
 
@@ -596,7 +596,7 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
         inputs = {}
         for ny in range(-2, self.Ny):
             for nx in range(-2, self.Nx + 2):
-                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_samples)[0]
+                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(batch_size=num_samples, dtype=self.tf_dtype)
                 inputs[f"{nx}{ny}"] = tf.zeros((num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
 
@@ -699,7 +699,7 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
         inputs = {}
         for ny in range(-2, self.Ny):
             for nx in range(-2, self.Nx + 2):
-                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_tot_symmetries * num_samples)[0]
+                rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(batch_size=num_tot_symmetries * num_samples, dtype=self.tf_dtype)
                 inputs[f"{nx}{ny}"] = tf.zeros((num_tot_symmetries * num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
 
