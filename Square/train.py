@@ -159,7 +159,7 @@ def train_(config: dict):
 
     ckpt_path = save_path
     sync = int(sum(sync_function(strategy)().numpy().tolist()))
-    print(f"Sync {sync} devices\n")
+    print(f"Sync {sync} devices")
 
     if task_id > 0:  # if we have multiple workers, create temporary checkpoint paths
         files = os.listdir(save_path)
@@ -207,7 +207,6 @@ def train_(config: dict):
     print(f"Size of the local hilbert space of each RNN cell = {local_hilbert_space_size}")
 
     RNN_cell_fun = get_rnn_cell(RNN_cell)
-    print(f'RNN_cell = {RNN_cell_fun}\n')
     number_of_nodes = strategy.num_replicas_in_sync // len(devices)
     number_of_replicas = strategy.num_replicas_in_sync
     print(f"Number of nodes: {number_of_nodes}")
@@ -279,7 +278,7 @@ def train_(config: dict):
                                                                 tf_dtype=tf_dtype)
 
     if TRAIN:
-        @tf.function()
+
         def single_train_step_vmc():
             print(f"Tracing single train step")
 
@@ -430,4 +429,3 @@ def train_(config: dict):
                     logger.save()
 
     return RNNWF, Heisenberg_Energy, strategy
-

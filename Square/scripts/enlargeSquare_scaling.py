@@ -147,8 +147,6 @@ if __name__ == '__main__':
         'Ny': 6,  # number of sites in the y-direction
 
         #### RNN
-        'RNN_Type': 'TwoD',
-        # 'activation_function': tf.nn.tanh,  # activation of the RNN cell
         'units': units,  # number of memory/hidden units
         'use_complex': use_complex,  # weights shared between RNN cells or not
         'num_samples': num_samples,  # Batch size
@@ -176,13 +174,6 @@ if __name__ == '__main__':
         'TRAIN': True,  # whether to train the model
         'experiment_name': experiment_name,  # unique name
         'data_path_prepend': data_path_prepend,
-
-        #### Final Estimates
-        'ENERGY': True,
-        'num_samples_final_energy_estimate': 10000,
-        'CORRELATIONS_MATRIX': True,
-        'correlation_mode': 'Sxyz',
-        'num_samples_final_correlations_estimate': 10000,
     }
 
     config_step2 = {
@@ -198,8 +189,6 @@ if __name__ == '__main__':
         'Ny': 6,  # number of sites in the y-direction
 
         #### RNN
-        'RNN_Type': 'TwoD',
-        'activation_function': tf.nn.tanh,  # activation of the RNN cell
         'units': units,  # number of memory/hidden units
         'use_complex': use_complex,  # weights shared between RNN cells or not
         'num_samples': num_samples,  # Batch size
@@ -227,13 +216,6 @@ if __name__ == '__main__':
         'TRAIN': True,  # whether to train the model
         'experiment_name': experiment_name,  # unique name
         'data_path_prepend': data_path_prepend,
-
-        #### Final Estimates
-        'ENERGY': True,
-        'num_samples_final_energy_estimate': 10000,
-        'CORRELATIONS_MATRIX': True,
-        'correlation_mode': 'Sxyz',
-        'num_samples_final_correlations_estimate': 10000,
     }
 
     config_step3 = {
@@ -249,8 +231,6 @@ if __name__ == '__main__':
         'Ny': 6,  # number of sites in the y-direction
 
         #### RNN
-        'RNN_Type': 'TwoD',
-        'activation_function': tf.nn.tanh,  # activation of the RNN cell
         'units': units,  # number of memory/hidden units
         'use_complex': use_complex,  # weights shared between RNN cells or not
         'num_samples': num_samples,  # Batch size
@@ -303,7 +283,7 @@ if __name__ == '__main__':
     if schedule == 'rate':
         configs = [config_step1.copy(), config_step2.copy(), config_step3.copy(), ]
 
-        L_list = [8, 10, 12, 14, 16, 18, 20]
+        L_list = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36]
         for _L in L_list:
             new_conf = configs[-1].copy()
             new_conf["previous_config"] = new_conf.copy()
@@ -312,6 +292,8 @@ if __name__ == '__main__':
             new_conf["lr"] = LRSchedule_constant(1e-5 )
             new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
             configs.append(new_conf.copy())
+            if _L >= 20: 
+                new_conf['CORRELATIONS_MATRIX'] = False
 
     if path:
         # Only print the path of the last config.
@@ -333,9 +315,6 @@ if __name__ == '__main__':
         for conf in configs:
             conf['strategy'] = strategy
             conf['task_id'] = task_id
-            conf['CORRELATIONS_MATRIX'] = False
-            conf['Sk_from_Si'] = False
-            conf['ENERGY'] = True
             conf['scale'] = scale
             conf['rate'] = rate
             train_(conf)
