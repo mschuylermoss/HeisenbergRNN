@@ -398,12 +398,7 @@ def train_(config: dict):
                     print("Standard training")
 
             start = time.time()
-            if it==1:
-                trace_time = time.time()
             cost, local_energies, log_probs = distributed_train_step_vmc()
-            if it==1:
-                print("Trace time:", time.time() - trace_time)
-            print(f"Step {it}")
             time_per_step = time.time() - start
             cost_np = cost.numpy()
             local_energies_np = local_energies.numpy()
