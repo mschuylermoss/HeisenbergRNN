@@ -26,7 +26,7 @@ def get_Heisenberg_Energy_triangular_TriMS(J, interaction_list_is, interaction_l
     yx_xy = tf.complex(tf.cast(np.sqrt(3) / 2, dtype=tf_dtype), tf.cast(0., dtype=tf_dtype))
     J_tf = tf.cast(J, dtype=tf_dtype)
 
-    @tf.function()
+    # @tf.function()
     def Heisenberg_Energy_Vectorized_tf_function_MS(samples, log_amps):
         N = tf.shape(samples)[1]
 
@@ -61,7 +61,7 @@ def get_Heisenberg_Energy_triangular_TriMS(J, interaction_list_is, interaction_l
 
         return Energies
 
-    @tf.function()
+    # @tf.function()
     def Heisenberg_Energy_Vectorized_tf_function_noMS(samples, log_amps):
         N = tf.shape(samples)[1]
 
@@ -116,7 +116,7 @@ def get_Heisenberg_Energy_triangular_SquareMS(J, interactions_s, interactions_di
     J_mat_d_tf = tf.constant(J_mat_d, dtype=tf_dtype)
     J_tf = tf.complex(tf.cast(J, dtype=tf_dtype), tf.cast(0.0, dtype=tf_dtype))
 
-    @tf.function()
+    # @tf.function()
     def Heisenberg_Energy_Vectorized_tf_function_square(samples, og_amps):
         N = tf.shape(samples)[1]
         if J_tf.dtype.name == 'complex64':
@@ -140,7 +140,7 @@ def get_Heisenberg_Energy_triangular_SquareMS(J, interactions_s, interactions_di
 
         return Energies
 
-    @tf.function()
+    # @tf.function()
     def Heisenberg_Energy_Vectorized_tf_function_diags(samples, og_amps):
         N = tf.shape(samples)[1]
         if J_tf.dtype.name == 'complex64':

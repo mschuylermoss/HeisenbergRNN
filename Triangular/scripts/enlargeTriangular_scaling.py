@@ -84,6 +84,11 @@ if not path:
     else:
         import tensorflow as tf
 
+        for dev in tf.config.list_physical_devices("GPU"):
+            tf.config.experimental.set_memory_growth(
+                dev, enable=True
+            )
+
         if sys.platform == 'darwin':
             print("Detected MacOS, defaulting to CPU")
             tf.config.set_visible_devices([], "GPU")
@@ -144,8 +149,6 @@ if __name__ == '__main__':
         'Ny': 6,  # number of sites in the y-direction
 
         #### RNN
-        'RNN_Type': 'TwoD',
-        # 'activation_function': tf.nn.tanh,  # activation of the RNN cell
         'units': units,  # number of memory/hidden units
         'weight_sharing': weight_sharing,
         'use_complex': use_complex,  # weights shared between RNN cells or not
@@ -189,8 +192,6 @@ if __name__ == '__main__':
         'Ny': 6,  # number of sites in the y-direction
 
         #### RNN
-        'RNN_Type': 'TwoD',
-        'activation_function': tf.nn.tanh,  # activation of the RNN cell
         'units': units,  # number of memory/hidden units
         'weight_sharing': weight_sharing,
         'use_complex': use_complex,  # weights shared between RNN cells or not
@@ -234,8 +235,6 @@ if __name__ == '__main__':
         'Ny': 6,  # number of sites in the y-direction
 
         #### RNN
-        'RNN_Type': 'TwoD',
-        'activation_function': tf.nn.tanh,  # activation of the RNN cell
         'units': units,  # number of memory/hidden units
         'weight_sharing': weight_sharing,
         'use_complex': use_complex,  # weights shared between RNN cells or not

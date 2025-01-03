@@ -321,7 +321,7 @@ def train_(config: dict):
             return local_energies_s_tf + local_energies_d_tf
 
     if TRAIN:
-        @tf.function()
+
         def single_train_step_vmc(temperature):
             print(f"Tracing single train step")
 

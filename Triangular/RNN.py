@@ -363,9 +363,9 @@ class cMDRNNWavefunction(RNNWavefunction):
                 inputs[f"{nx}{ny}"] = tf.zeros((num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
                 if self.weight_sharing=='sublattice':
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(num_samples)[0]
+                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(batch_size=num_samples, dtype=self.tf_dtype)
                 else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_samples)[0]
+                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(batch_size=num_samples, dtype=self.tf_dtype)
 
                 # Making a loop over the sites with the 2DRNN
         num_up = tf.zeros(num_samples, dtype=self.tf_dtype)
@@ -477,9 +477,9 @@ class cMDRNNWavefunction(RNNWavefunction):
                 inputs[f"{nx}{ny}"] = tf.zeros((num_tot_symmetries * num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
                 if self.weight_sharing=='sublattice':
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(num_tot_symmetries * num_samples)[0]
+                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(batch_size=num_tot_symmetries * num_samples, dtype=self.tf_dtype)
                 else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_tot_symmetries * num_samples)[0]
+                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(batch_size=num_tot_symmetries * num_samples, dtype=self.tf_dtype)
 
         probs = [[[] for nx in range(self.Nx)] for ny in range(self.Ny)]
         phases = [[[] for nx in range(self.Nx)] for ny in range(self.Ny)]
@@ -686,9 +686,9 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
                 inputs[f"{nx}{ny}"] = tf.zeros((num_samples, self.local_hilbert_space),
                                                dtype=self.tf_dtype)
                 if self.weight_sharing=='sublattice':
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(num_samples)[0]
+                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(batch_size=num_samples, dtype=self.tf_dtype)
                 else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_samples)[0]
+                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(batch_size=num_samples, dtype=self.tf_dtype)
 
         # Making a loop over the sites with the 2DRNN
         num_up = tf.zeros(num_samples, dtype=self.tf_dtype)
@@ -806,9 +806,9 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
                 inputs[f"{nx}{ny}"] = tf.zeros((num_tot_symmetries * num_samples, self.local_hilbert_space),
                                 dtype=self.tf_dtype)
                 if self.weight_sharing=='sublattice':
-                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(num_tot_symmetries * num_samples)[0]
+                    rnn_states[f"{nx}{ny}"] = self.rnn[0].get_initial_state(batch_size=num_tot_symmetries * num_samples, dtype=self.tf_dtype)
                 else:
-                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(num_tot_symmetries * num_samples)[0]
+                    rnn_states[f"{nx}{ny}"] = self.rnn.get_initial_state(batch_size=num_tot_symmetries * num_samples, dtype=self.tf_dtype)
 
         probs = [[[] for nx in range(self.Nx)] for ny in range(self.Ny)]
         phases = [[[] for nx in range(self.Nx)] for ny in range(self.Ny)]
