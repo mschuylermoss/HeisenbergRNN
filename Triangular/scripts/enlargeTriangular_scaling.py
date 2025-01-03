@@ -133,7 +133,7 @@ if __name__ == '__main__':
     bc = args.bc
     which_MS = args.which_MS
     use_complex = True
-    data_path_prepend = '/mnt/ceph/users/smoss/HeisenbergRNN'
+    data_path_prepend = '/mnt/ceph/users/rwiersema/HeisenbergRNN'
     l_symmetries = (args.lsym == "1")
     schedule = args.schedule
 

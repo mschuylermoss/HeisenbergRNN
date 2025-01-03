@@ -9,36 +9,34 @@
 #SBATCH --time=3-00:00:00
 #SBATCH --output=./outputs/heisenberg.%j.%N.out
 
-source ../../venv/bin/activate
-
-# exp_name=$1
-# bc=$2
-# rate=$3
-# echo $exp_name
-# echo $bc
-# echo $rate
-
-# for scale in 0.25 0.5 1 2; do
-#     while [ "$(jobs -p | wc -l)" -ge "$SLURM_NTASKS" ]; do
-#         sleep 30
-#     done
-#     echo "Launching job ${scale} with ${SLURM_CPUS_PER_TASK} CPUs"
-#     srun --output="./outputs/heisenberg_${scale}_${bc}_${rate}.out" --ntasks=1 python -u enlargeSquare_scaling.py --seed 100 --experiment_name $exp_name	--bc $bc --units 256 --scale $scale --rate $rate&
-# done
-# wait
+source ../../venvcuda/bin/activate
 
 exp_name=$1
 scale=$2
+rate=$3
+bc=$4
+schedule=$5
+
 echo $exp_name
 echo $scale
+echo $rate
+echo $bc
+echo $schedule
 
-for rate in 0.25 0.475; do
-    for bc in 'open' 'periodic'; do
+for T0 in 0.25 1.; do
+    for which_MS in "Square" "Triangular"; do
         while [ "$(jobs -p | wc -l)" -ge "$SLURM_NTASKS" ]; do
             sleep 30
         done
-        echo "Launching job rate=${rate} with ${SLURM_CPUS_PER_TASK} CPUs"
-        srun --output="./outputs/heisenberg_${scale}_${bc}_${rate}.out" --ntasks=1 python -u enlargeSquare_scaling.py --seed 100 --experiment_name $exp_name --bc $bc --units 256 --scale $scale --rate $rate&
+        echo "Launching job T0=${T0}, ms=${which_MS} with ${SLURM_CPUS_PER_TASK} CPUs"
+        srun --output="./outputs/heisenberg_${scale}_${rate}_${bc}_T${T0}_ms${which_MS}.out" --ntasks=1 python -u enlargeTriangular_scaling.py \
+                                                                                                          --experiment_name $exp_name \
+                                                                                                          --bc $bc \
+                                                                                                          --T0 $T0 \
+                                                                                                          --which_MS $which_MS \
+                                                                                                          --scale $scale\
+                                                                                                          --schedule $schedule\
+                                                                                                          --rate $rate&
     done
 done
 wait
