@@ -292,8 +292,6 @@ if __name__ == '__main__':
             new_conf["lr"] = LRSchedule_constant(1e-5 )
             new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
             configs.append(new_conf.copy())
-            if _L >= 20: 
-                new_conf['CORRELATIONS_MATRIX'] = False
 
     if path:
         # Only print the path of the last config.
@@ -317,6 +315,11 @@ if __name__ == '__main__':
             conf['task_id'] = task_id
             conf['scale'] = scale
             conf['rate'] = rate
+            if conf['Nx'] < 32:
+                conf['TRAIN'] = False
+            if conf['Nx'] > 20:
+                conf['CORRELATIONS_MATRIX'] = False
+                conf['chunk'] = True
             train_(conf)
             estimate_(conf)
             tf.keras.backend.clear_session()
