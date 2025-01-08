@@ -88,6 +88,7 @@ def train_(config: dict):
     units = config['units']
     use_complex = config.get('use_complex', False)
     num_samples = config['num_samples']
+    chunk_size = config.get("chunk_size", None)
     lr = config.get('lr', 5e-4)
     gradient_clip = config.get('gradient_clip', False)
     tf_dtype = config.get('tf_dtype', tf.float32)
@@ -107,6 +108,7 @@ def train_(config: dict):
     #### Symmetries ####
     h_symmetries = config['h_symmetries']
     l_symmetries = config['l_symmetries']
+    print('Lattice symmetries', l_symmetries)
     spin_parity = config['spin_parity']
 
     # 2. Set data path:
@@ -214,6 +216,11 @@ def train_(config: dict):
     print(f"Total number of GPUs: {number_of_replicas}")
     num_samples_per_device = int(np.ceil(num_samples / number_of_replicas))
     print(f"Number of samples per device: {num_samples_per_device}\n")
+    if chunk_size is not None:
+        assert int(num_samples_per_device//chunk_size)== num_samples_per_device/chunk_size,\
+            f'`num_samples_per_device`={num_samples_per_device} is not divisible by `chunk_size`={chunk_size}'
+        print(f"Chunk size = {chunk_size}")
+        print(f"Number of samples per device: {num_samples_per_device//chunk_size} (chunked)\n")
 
     RNN_x = Nx
     RNN_y = Ny
@@ -279,6 +286,11 @@ def train_(config: dict):
 
     if TRAIN:
 
+        @tf.function()
+        def chunks(samples, log_amps):
+            print(f"Tracing chunks of size {chunk_size}")
+            return tf.stop_gradient(Heisenberg_Energy(samples, log_amps))
+
         def single_train_step_vmc():
             print(f"Tracing single train step")
 
@@ -286,7 +298,18 @@ def train_(config: dict):
             with tf.GradientTape() as tape:
                 log_probs_tf, log_amps_tf = RNNWF.log_probsamps(samples_tf, symmetrize=l_symmetries,
                                                                 parity=spin_parity)
-                local_energies_tf = tf.stop_gradient(Heisenberg_Energy(samples_tf, log_amps_tf))
+                if chunk_size is None:
+                    local_energies_tf = tf.stop_gradient(Heisenberg_Energy(samples_tf, log_amps_tf))
+                else:
+                    samples_tf_split = tf.stack(tf.split(samples_tf, chunk_size))
+                    log_amps_tf_split = tf.stack(tf.split(log_amps_tf, chunk_size))
+                    local_energies_tf_init = tf.TensorArray(tf.complex64, size=chunk_size, dynamic_size=False,
+                                                            element_shape=(num_samples_per_device // chunk_size,))
+                    condition = lambda i, _: i < chunk_size
+                    body = lambda i, ta: (i + 1, ta.write(i, chunks(samples_tf_split[i], log_amps_tf_split[i])))
+                    init_state = (0, local_energies_tf_init)
+                    n, local_energies_tf = tf.while_loop(condition, body, init_state, parallel_iterations=1)
+                    local_energies_tf = local_energies_tf.concat()
                 cost_term_1 = tf.reduce_mean(
                     tf.multiply(tf.math.conj(log_amps_tf), local_energies_tf))
                 cost_term_2 = tf.reduce_mean(tf.math.conj(log_amps_tf)) * tf.reduce_mean(
