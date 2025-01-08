@@ -287,9 +287,10 @@ def train_(config: dict):
     if TRAIN:
 
         @tf.function()
-        def chunks(samples, log_amps):
+        def chunks(acc, elems):
             print(f"Tracing chunks of size {chunk_size}")
-            return tf.stop_gradient(Heisenberg_Energy(samples, log_amps))
+            idx, ta = acc
+            return idx+1, tf.stop_gradient(Heisenberg_Energy(elems[0], elems[1]))
 
         def single_train_step_vmc():
             print(f"Tracing single train step")
@@ -303,13 +304,11 @@ def train_(config: dict):
                 else:
                     samples_tf_split = tf.stack(tf.split(samples_tf, chunk_size))
                     log_amps_tf_split = tf.stack(tf.split(log_amps_tf, chunk_size))
-                    local_energies_tf_init = tf.TensorArray(tf.complex64, size=chunk_size, dynamic_size=False,
-                                                            element_shape=(num_samples_per_device // chunk_size,))
-                    condition = lambda i, _: i < chunk_size
-                    body = lambda i, ta: (i + 1, ta.write(i, chunks(samples_tf_split[i], log_amps_tf_split[i])))
-                    init_state = (0, local_energies_tf_init)
-                    n, local_energies_tf = tf.while_loop(condition, body, init_state, parallel_iterations=1)
-                    local_energies_tf = local_energies_tf.concat()
+                    init_tensor = tf.zeros(num_samples_per_device // chunk_size, dtype=log_amps_tf.dtype)
+                    idx, local_energies_tf = tf.scan(chunks, elems=(samples_tf_split, log_amps_tf_split),
+                                                initializer=(0, init_tensor),
+                                                parallel_iterations=1, infer_shape=False)
+                    local_energies_tf = tf.reshape(local_energies_tf, (num_samples_per_device, ))
                 cost_term_1 = tf.reduce_mean(
                     tf.multiply(tf.math.conj(log_amps_tf), local_energies_tf))
                 cost_term_2 = tf.reduce_mean(tf.math.conj(log_amps_tf)) * tf.reduce_mean(
