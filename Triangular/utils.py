@@ -52,9 +52,9 @@ def data_saver(config, train_method: str, N: int, data_path_prepend, task_id=0):
     experiment_name = config['experiment_name']
     size = f'/N_{N}'
     train_method = f'/{train_method}'
-    testing_params = f"/nh{config['units']}_scale{config['scale']}_rate{config['rate']}"
     weight_sharing = config['weight_sharing']
-    testing_params += f"_{weight_sharing}WS" if weight_sharing is not None else ""
+    ws_path = f"_{weight_sharing}WS" if weight_sharing is not None else ""
+    testing_params = f"/nh{config['units']}{ws_path}/scale{config['scale']}_rate{config['rate']}_T{config['T0_L_6']:1.2f}"
     save_path = datapath + experiment_name + testing_params + size + train_method + f'/seed_{config["seed"]}'
 
     # If multiple workers are active, only make directories in node 0

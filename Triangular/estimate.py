@@ -353,7 +353,7 @@ def estimate_(config: dict):
     # Get save path
     data_path_prepend = config.get('data_path_prepend', './data/')
     task_id = config.get('task_id', 0)
-    T0 = config['Tmax']
+    T0 = config['T0']
     h_symmetries = config.get('h_symmetries', False)
     l_symmetries = config.get('l_symmetries', False)
     spin_parity = config.get('spin_parity', False)
@@ -419,8 +419,8 @@ if __name__ == "__main__":
         #### Annealing
         'scale': 1.,
         'rate': 0.25,
-        'Tmax': 0,
-        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
+        'T0': 0,
+        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if T0 = 0)
         'num_annealing_steps': 1000,  # number of annealing steps
         'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
         'num_training_steps': 0,  # number of training steps
