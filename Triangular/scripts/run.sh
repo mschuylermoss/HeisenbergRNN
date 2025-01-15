@@ -37,6 +37,7 @@ for T0 in 0.25 1.; do
                                                                                                           --scale $scale\
                                                                                                           --schedule $schedule\
                                                                                                           --rate $rate&
+        sleep 0.05
     done
 done
 wait

@@ -267,7 +267,7 @@ if __name__ == '__main__':
         #### Final Estimates
         'ENERGY': True,
         'num_samples_final_energy_estimate': 10000,
-        'CORRELATIONS_MATRIX': True,
+        'CORRELATIONS_MATRIX': False,
         'correlation_mode': 'Sxyz',
         'num_samples_final_correlations_estimate': 10000,
     }
