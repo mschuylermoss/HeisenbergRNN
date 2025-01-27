@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 
 default_p1 = (1., 0.)
 default_p2 = (-1 / 2, np.sqrt(3) / 2)
@@ -439,7 +440,7 @@ def buildlattice_alltoall_primitive_vector(L: int, p1=default_p1, p2=default_p2,
 
     return interactions
 
-
+## maybe need to fix this??
 def get_all_longest_r_interactions_triangular(L):
     all_interactions = buildlattice_alltoall_primitive_vector(L, default_p1, default_p2, periodic=True)
     longest_r_interactions = []
@@ -448,3 +449,36 @@ def get_all_longest_r_interactions_triangular(L):
             longest_r_interactions.append(idx)
 
     return longest_r_interactions
+
+
+def get_batched_interactions_Jmats(L, interactions, interactions_batch_size, tf_dtype):
+    num_batches = len(interactions) // interactions_batch_size
+    J_matrix_list = {}
+    interactions_list = {}
+
+    for batch in range(num_batches):
+        start = batch * interactions_batch_size
+        stop = (batch + 1) * interactions_batch_size
+        interactions_batch = interactions[start:stop]
+        J_mat = np.zeros((len(interactions_batch), L ** 2))
+        for n, interaction in enumerate(interactions_batch):
+            i, j = interaction
+            J_mat[n, i] += 1
+            J_mat[n, j] += 1
+        J_matrix = tf.constant(J_mat, dtype=tf_dtype)
+        J_matrix_list[batch] = J_matrix
+        interactions_list[batch] = interactions_batch
+
+    if num_batches * interactions_batch_size != len(interactions):
+        start = num_batches * interactions_batch_size
+        interactions_batch = interactions[start:]
+        J_mat = np.zeros((len(interactions_batch), L ** 2))
+        for n, interaction in enumerate(interactions_batch):
+            i, j = interaction
+            J_mat[n, i] += 1
+            J_mat[n, j] += 1
+        J_matrix = tf.constant(J_mat, dtype=tf_dtype)
+        J_matrix_list[num_batches] = J_matrix
+        interactions_list[num_batches] = interactions_batch
+
+    return J_matrix_list, interactions_list
