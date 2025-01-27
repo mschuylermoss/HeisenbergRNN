@@ -677,9 +677,9 @@ if __name__ == "__main__":
         'scale': 1.,
         'rate': 0.25,
         'Tmax': 0,
-        'num_warmup_steps': 0,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
-        'num_annealing_steps': 2000,  # number of annealing steps
-        'num_equilibrium_steps': 1,  # number of gradient steps at each temperature value
+        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
+        'num_annealing_steps': 1000,  # number of annealing steps
+        'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
         'num_training_steps': 0,  # number of training steps
 
         #### Symmetries

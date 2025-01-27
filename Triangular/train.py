@@ -88,6 +88,7 @@ def train_(config: dict):
     weight_sharing = config.get('weight_sharing', 'all')
     use_complex = config.get('use_complex', True)
     num_samples = config['num_samples']
+    chunk_size = config.get("chunk_size", None)
     lr = config.get('lr', 5e-4)
     gradient_clip = config.get('gradient_clip', False)
     tf_dtype = config.get('tf_dtype', tf.float32)
@@ -97,7 +98,8 @@ def train_(config: dict):
     kernel_initializer = config.get('kernel_initializer', 'glorot_uniform')  # can be 'zeros' or 'glorot_uniform'
 
     #### Annealing ####
-    T0 = config['Tmax']
+    # We only anneal for 6x6 systems
+    T0 = config['T0']
     num_warmup_steps = config['num_warmup_steps']
     num_annealing_steps = config['num_annealing_steps']
     num_equilibrium_steps = config['num_equilibrium_steps']
@@ -133,7 +135,7 @@ def train_(config: dict):
 
         previous_N_sites = previous_config['Nx'] * previous_config['Ny']
         previous_N_spins = previous_N_sites
-        previous_train_method = get_train_method(previous_config['Tmax'],
+        previous_train_method = get_train_method(previous_config['T0'],
                                                  previous_config['h_symmetries'],
                                                  previous_config['l_symmetries'])
         old_save_path = data_saver(previous_config, previous_train_method, previous_N_spins, data_path_prepend)
@@ -321,6 +323,11 @@ def train_(config: dict):
             return local_energies_s_tf + local_energies_d_tf
 
     if TRAIN:
+        @tf.function()
+        def chunks(acc, elems):
+            print(f"Tracing chunks of size {chunk_size}")
+            idx, ta = acc
+            return idx + 1, tf.stop_gradient(Heisenberg_Energy(elems[0], elems[1]))
 
         def single_train_step_vmc(temperature):
             print(f"Tracing single train step")
@@ -329,7 +336,16 @@ def train_(config: dict):
             with tf.GradientTape() as tape:
                 log_probs_tf, log_amps_tf = RNNWF.log_probsamps(samples_tf, symmetrize=l_symmetries,
                                                                 parity=spin_parity)
-                local_energies_tf = Heisenberg_Energy(samples_tf, log_amps_tf)
+                if chunk_size is None:
+                    local_energies_tf = tf.stop_gradient(Heisenberg_Energy(samples_tf, log_amps_tf))
+                else:
+                    samples_tf_split = tf.stack(tf.split(samples_tf, chunk_size))
+                    log_amps_tf_split = tf.stack(tf.split(log_amps_tf, chunk_size))
+                    init_tensor = tf.zeros(num_samples_per_device // chunk_size, dtype=log_amps_tf.dtype)
+                    idx, local_energies_tf = tf.scan(chunks, elems=(samples_tf_split, log_amps_tf_split),
+                                                initializer=(0, init_tensor),
+                                                parallel_iterations=1, infer_shape=False)
+                    local_energies_tf = tf.reshape(local_energies_tf, (num_samples_per_device, ))
                 cost_term_1 = tf.reduce_mean(
                     tf.multiply(tf.math.conj(log_amps_tf), tf.stop_gradient(local_energies_tf)))
                 cost_term_2 = tf.reduce_mean(tf.math.conj(log_amps_tf)) * tf.reduce_mean(
@@ -517,8 +533,9 @@ if __name__ == "__main__":
         #### Annealing
         'scale': 1.,
         'rate': 0.25,
-        'Tmax': 0,
-        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
+        'T0': 0,
+        'T0_L_6': 0,
+        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if T0 = 0)
         'num_annealing_steps': 1000,  # number of annealing steps
         'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
         'num_training_steps': 0,  # number of training steps

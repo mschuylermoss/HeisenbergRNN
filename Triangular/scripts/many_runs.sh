@@ -8,6 +8,7 @@ for scale in 1 2; do
  for rate in 0.25 0.475; do
      X="s=$scale|r=$rate"
      sbatch -J "$X" run.sh $exp_name $scale $rate $bc $schedule
+     sleep 0.05
   done
 done
 

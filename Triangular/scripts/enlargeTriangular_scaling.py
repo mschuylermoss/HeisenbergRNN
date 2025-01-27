@@ -158,9 +158,10 @@ if __name__ == '__main__':
         'tf_dtype': tf_dtype,
 
         #### Annealing
-        'Tmax': args.T0,
-        # Highest temperature, if Tmax=0 then its VMC, ***add if statement to skip annealing if Tmax = 0
-        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
+        'T0': args.T0,# Highest temperature, if T0=0 then its VMC, ***add if statement to skip annealing if T0 = 0
+        'T0_L_6': args.T0, # Original annealing temperature start
+        # Highest temperature, if T0=0 then its VMC, ***add if statement to skip annealing if T0 = 0
+        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if T0 = 0)
         'num_annealing_steps': int(scale * number_of_annealing_step),  # number of annealing steps
         'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
         'num_training_steps': 0,  # number of training steps
@@ -202,8 +203,9 @@ if __name__ == '__main__':
         'tf_dtype': tf_dtype,
 
         #### Annealing
-        'Tmax': 0,  # Highest temperature, if Tmax=0 then its VMC, ***add if statement to skip annealing if Tmax = 0
-        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
+        'T0': 0,  # Highest temperature, if T0=0 then its VMC, ***add if statement to skip annealing if T0 = 0
+        'T0_L_6': args.T0, # Original annealing temperature start
+        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if T0 = 0)
         'num_annealing_steps': int(scale * number_of_annealing_step),  # number of annealing steps
         'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
         'num_training_steps': int(scale * 25000),  # number of training steps
@@ -245,8 +247,9 @@ if __name__ == '__main__':
         'tf_dtype': tf_dtype,
 
         #### Annealing
-        'Tmax': 0,  # Highest temperature, if Tmax=0 then its VMC, ***add if statement to skip annealing if Tmax = 0
-        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
+        'T0': 0,  # Highest temperature, if T0=0 then its VMC, ***add if statement to skip annealing if T0 = 0
+        'T0_L_6': args.T0, # Original annealing temperature start
+        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if T0 = 0)
         'num_annealing_steps': int(scale * number_of_annealing_step),  # number of annealing steps
         'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
         'num_training_steps': int(scale * 50000),  # number of training steps
@@ -267,7 +270,7 @@ if __name__ == '__main__':
         #### Final Estimates
         'ENERGY': True,
         'num_samples_final_energy_estimate': 10000,
-        'CORRELATIONS_MATRIX': True,
+        'CORRELATIONS_MATRIX': False,
         'correlation_mode': 'Sxyz',
         'num_samples_final_correlations_estimate': 10000,
     }
