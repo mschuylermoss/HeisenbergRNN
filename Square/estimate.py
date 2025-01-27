@@ -11,10 +11,11 @@ import numpy as np
 from train import train_
 from utils import get_train_method, data_saver
 
-from interactions import buildlattice_square, buildlattice_alltoall
-from correlations import get_batched_interactions_Jmats
+from interactions import buildlattice_square, buildlattice_alltoall, get_longest_r_interactions_square
+from interactions import get_batched_interactions_Jmats
 from correlations import get_Heisenberg_realspace_Correlation_Vectorized, get_Si, calculate_expectation_ft_Si_square
 from correlations import undo_marshall_sign, calculate_structure_factor
+from correlations import calculate_longrC
 
 
 def save_dict(di_, filename_):
@@ -47,6 +48,13 @@ def estimate_energy(config, save_path, energy_fxn, sample_fxn, log_fxn, strategy
         batch_size = num_samples_per_device * strategy.num_replicas_in_sync
         num_samples_final_energy_estimate = batch_size * num_batches
 
+    chunk_size = config.get("chunk_size", None)
+    if chunk_size is not None:
+        assert int(num_samples_per_device//chunk_size)== num_samples_per_device/chunk_size,\
+            f'`num_samples_per_device`={num_samples_per_device} is not divisible by `chunk_size`={chunk_size}'
+        print(f"Chunk size = {chunk_size}")
+        print(f"Number of samples per device: {num_samples_per_device//chunk_size} (chunked)\n")
+
     if PRINT:
         print(f"\nCalculating the final energy with {num_samples_final_energy_estimate} samples")
         print(f"Batch size = {batch_size}")
@@ -59,13 +67,28 @@ def estimate_energy(config, save_path, energy_fxn, sample_fxn, log_fxn, strategy
     if num_samples_final_energy_estimate is not None:
 
         @tf.function()
+        def chunks(acc, elems):
+            print(f"Tracing chunks of size {chunk_size}")
+            idx, ta = acc
+            return idx+1, energy_fxn(elems[0], elems[1])
+
+        @tf.function()
         def final_energy_single():
             print(f"Tracing single energy calculation")
 
             samples_tf = sample_fxn(num_samples_per_device)
-
             log_probs_tf, log_amps_tf = log_fxn(samples_tf)
-            local_energies_tf = energy_fxn(samples_tf, log_amps_tf)
+            if chunk_size is None:
+                local_energies_tf = energy_fxn(samples_tf, log_amps_tf)
+            else:
+                samples_tf_split = tf.stack(tf.split(samples_tf, chunk_size))
+                log_amps_tf_split = tf.stack(tf.split(log_amps_tf, chunk_size))
+                init_tensor = tf.zeros(num_samples_per_device // chunk_size, dtype=log_amps_tf.dtype)
+                idx, local_energies_tf = tf.scan(chunks, elems=(samples_tf_split, log_amps_tf_split),
+                                            initializer=(0, init_tensor),
+                                            parallel_iterations=1, infer_shape=False)
+                local_energies_tf = tf.reshape(local_energies_tf, (num_samples_per_device, ))
+
             return tf.stack([tf.math.real(local_energies_tf),
                              tf.math.imag(local_energies_tf)], axis=-1)
 
@@ -122,6 +145,18 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
         num_sample_batches += 1
         num_samples_final_correlations_estimate = num_sample_batches * batch_size_samples
 
+    chunk_size = config.get('chunk_size',None)
+    if chunk_size is not None:
+        print("Chunking over samples for large system size")
+        assert int(batch_size_per_device/chunk_size) == batch_size_per_device/chunk_size,\
+        f"batch_size={batch_size_samples} not divisible by chunk_size={chunk_size}"
+        batch_size_per_device = int(batch_size_per_device/chunk_size)
+        batch_size_samples = batch_size_per_device * number_of_replicas
+        num_sample_batches = num_samples_final_correlations_estimate // batch_size_samples
+        if num_samples_final_correlations_estimate % batch_size_samples != 0:
+            num_sample_batches += 1
+            num_samples_final_correlations_estimate = num_sample_batches * batch_size_samples
+
     Nx = config['Nx']
     Ny = config['Ny']
     tf_dtype = config.get('tf_dtype', tf.float32)
@@ -133,12 +168,17 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
 
     correlation_mode = config['correlation_mode']
     assert correlation_mode in ['Sxyz',
-                                'Sz'], f"`correlation` mode must be `Sxyz` or `Sz`, received {correlation_mode}"
+                                'Sz'], f"`correlation` mode must be `Sxyz` or `Sz` received {correlation_mode}"
+    only_longest_r = config.get('only_longest_r',False)
+    if only_longest_r:
+        assert periodic, f"only_Longest_r method can only be used for periodic boundary conditions!"
 
     if PRINT:
         print(f"\nCalculating final correlations with {num_samples_final_correlations_estimate} samples")
         print(f"Batch size = {batch_size_samples} ({num_sample_batches} batches)")
         print(f"{number_of_replicas} devices, so batch size per device: {batch_size_per_device}")
+        if chunk_size is not None:
+            print(f"Chunked! chunk_size={chunk_size}")
         print(f"Mode = {correlation_mode}")
 
     corr_final_directory = f'/final_corrs/ns_{num_samples_final_correlations_estimate}'
@@ -146,7 +186,10 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
         os.makedirs(save_path + corr_final_directory)
 
     interactions = buildlattice_alltoall(Nx)
-    interactions_batch_size = len(buildlattice_square(Nx, Ny))  # number of first order
+    interactions_batch_size = len(buildlattice_square(Nx, Ny))  # number of NN interactions
+    if only_longest_r:
+        print(f"Only using interactions with r=(L/2,L/2)")
+        interactions = get_longest_r_interactions_square(Nx)
     J_matrix_list, interactions_batched = get_batched_interactions_Jmats(Nx, interactions,
                                                                          interactions_batch_size, tf_dtype)
     num_interaction_batches = len(J_matrix_list.keys())
@@ -265,13 +308,15 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
         print(f"Calculating correlations for interaction batch {batch_i + 1}/{num_interaction_batches}")
         J_mat_batch = J_matrix_list[batch_i]
         interactions_batch = np.array(interactions_batched[batch_i])
+        interactions_in_batch = len(interactions_batch)
         if not np.isnan(sz_matrix[interactions_batch[0, 0], interactions_batch[0, 1]]):
             print(f"Correlations for interaction batch {batch_i + 1} already calculated!")
             continue
-        batch_means_sxy = np.zeros((num_sample_batches, len(interactions_batch)))
-        batch_means_sz = np.zeros((num_sample_batches, len(interactions_batch)))
-        batch_vars_sxy = np.zeros((num_sample_batches, len(interactions_batch)))
-        batch_vars_sz = np.zeros((num_sample_batches, len(interactions_batch)))
+
+        batch_means_sxy = np.zeros((num_sample_batches, interactions_in_batch))
+        batch_means_sz = np.zeros((num_sample_batches, interactions_in_batch))
+        batch_vars_sxy = np.zeros((num_sample_batches, interactions_in_batch))
+        batch_vars_sz = np.zeros((num_sample_batches, interactions_in_batch))
         for batch_s in range(num_sample_batches):
             print(f"sample batch {batch_s}/{num_sample_batches}")
             samples_batch = all_samples[batch_s]
@@ -280,17 +325,18 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
                 sziszj, sxyisxyj = distributed_rsp_corr_fxn_zz_xx_yy(samples_batch, log_amps_batch, J_mat_batch)
             else:
                 sziszj = distributed_rsp_corr_fxn_zz(samples_batch, J_mat_batch)
+
             batch_means_sz[batch_s, :] = np.mean(sziszj.numpy(), axis=0)
             batch_vars_sz[batch_s, :] = np.var(sziszj.numpy(), axis=0)
             if correlation_mode == 'Sxyz':
                 batch_means_sxy[batch_s, :] = np.mean(sxyisxyj.numpy(), axis=0)
                 batch_vars_sxy[batch_s, :] = np.var(sxyisxyj.numpy(), axis=0)
 
-        sxy_allsamples = np.mean(batch_means_sxy, axis=0)
         sz_allsamples = np.mean(batch_means_sz, axis=0)
+        var_sz_allsamples = np.var(batch_means_sz, axis=0) + np.mean(batch_vars_sz, axis=0)
         if correlation_mode == 'Sxyz':
-            var_sxy_allsamples = np.mean(batch_vars_sxy, axis=0) + np.var(batch_means_sxy, axis=0)
-        var_sz_allsamples = np.mean(batch_vars_sz, axis=0) + np.var(batch_means_sz, axis=0)
+            sxy_allsamples = np.mean(batch_means_sxy, axis=0)
+            var_sxy_allsamples = np.var(batch_means_sxy, axis=0) + np.mean(batch_vars_sxy, axis=0)
 
         spin_is = interactions_batch[:, 0]
         spin_js = interactions_batch[:, 1]
@@ -312,23 +358,80 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
                         var_sxy_matrix)
         print(f"Time per interaction batch: {time.time() - timestart}")
 
-    if not np.isnan(sz_matrix[-1, -1]):  # done calculating matrix
+    if not np.isnan(sz_matrix[interactions[-1][0], interactions[-1][1]]):  # done calculating matrix
         if correlation_mode == 'Sxyz':
             undo_marshall_sign_minus_signs = undo_marshall_sign(Nx)
             SiSj = sz_matrix + sxy_matrix * undo_marshall_sign_minus_signs
             var_SiSj = var_sz_matrix + var_sxy_matrix
-            Sk, err_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
-            np.save(save_path + corr_final_directory + f'Sk_from_SiSj', Sk)
-            np.save(save_path + corr_final_directory + f'err_Sk_from_SiSj', err_Sk)
-            print(f"Sk (from <SiSj>) = {Sk}")
-
+            SziSzj = 3*sz_matrix
+            var_SziSzj = 3*var_sz_matrix
+            SxyiSxyj = 3*sxy_matrix*undo_marshall_sign_minus_signs
+            var_SxyiSxyj = 3*var_sxy_matrix
+            if only_longest_r:
+                C_L_2,C_L_2_err = calculate_longrC(interactions,SiSj)
+                np.save(save_path + corr_final_directory + f'/C_L_2', C_L_2)
+                np.save(save_path + corr_final_directory + f'/err_C_L_2', C_L_2_err)
+                print(f"C(L/2,L/2) = {C_L_2}")
+                Cz_L_2,Cz_L_2_err = calculate_longrC(interactions,SziSzj)
+                np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
+                np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
+                print(f"Cz(L/2,L/2) = {Cz_L_2}")
+                Cxy_L_2,Cxy_L_2_err = calculate_longrC(interactions,SxyiSxyj)
+                np.save(save_path + corr_final_directory + f'/Cxy_L_2', Cxy_L_2)
+                np.save(save_path + corr_final_directory + f'/err_Cxy_L_2', Cxy_L_2_err)
+                print(f"Cxy(L/2,L/2) = {Cxy_L_2}")
+            else:
+                Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
+                err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Sk_from_SiSj', Sk)
+                np.save(save_path + corr_final_directory + f'/err_Sk_from_SiSj', err_Sk)
+                print(f"Sk (from <SiSj>) = {Sk}")
+                Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic)
+                err_Skz = np.sqrt(var_Skz)/np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
+                np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
+                print(f"Sk (from <SziSzj>) = {Skz}")
+                Skxy, var_Skxy = calculate_structure_factor(Nx, SxyiSxyj, var_Sij=var_SxyiSxyj, periodic=periodic)
+                err_Skxy = np.sqrt(var_Skxy)/np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Sk_from_SxyiSxyj', Skxy)
+                np.save(save_path + corr_final_directory + f'/err_Sk_from_SxyiSxyj', err_Skxy)
+                print(f"Sk (from <SxyiSxyj>) = {Skxy}")
+                if periodic:
+                    long_r_interactions = get_longest_r_interactions_square(Nx)
+                    C_L_2,C_L_2_var = calculate_longrC(long_r_interactions,SiSj,var_SiSj)
+                    C_L_2_err = np.sqrt(C_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                    np.save(save_path + corr_final_directory + f'/C_L_2', C_L_2)
+                    np.save(save_path + corr_final_directory + f'/err_C_L_2', C_L_2_err)
+                    print(f"C(L/2,L/2) = {C_L_2}")
+                    Cz_L_2,Cz_L_2_err = calculate_longrC(long_r_interactions,SziSzj)
+                    Cz_L_2_err = np.sqrt(Cz_L_2_err)/np.sqrt(num_samples_final_correlations_estimate)
+                    np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
+                    np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
+                    print(f"Cz(L/2,L/2) = {Cz_L_2}")
+                    Cxy_L_2,Cxy_L_2_err = calculate_longrC(long_r_interactions,SxyiSxyj)
+                    Cxy_L_2_err = np.sqrt(Cxy_L_2_err)/np.sqrt(num_samples_final_correlations_estimate)
+                    np.save(save_path + corr_final_directory + f'/Cxy_L_2', Cxy_L_2)
+                    np.save(save_path + corr_final_directory + f'/err_Cxy_L_2', Cxy_L_2_err)
+                    print(f"Cxy(L/2,L/2) = {Cxy_L_2}")
         else:
-            SiSj = 3 * sz_matrix
-            var_SiSj = 3 * var_sz_matrix
-            Sk, err_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
-            np.save(save_path + corr_final_directory + f'Sk_from_SziSzj', Sk)
-            np.save(save_path + corr_final_directory + f'err_Sk_from_SziSzj', err_Sk)
-            print(f"Sk (from <SziSzj>) = {Sk}")
+            SziSzj = 3 * sz_matrix
+            var_SziSzj = 3 * var_sz_matrix
+            if only_longest_r:
+                Cz_L_2,Cz_L_2_err = calculate_longrC(interactions,SziSzj)
+                np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
+                np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
+                print(f"Cz(L/2,L/2) = {Cz_L_2}")
+            else:
+                Skz, err_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic)
+                np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
+                np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
+                print(f"Skz (from <SziSzj>) = {Skz}")
+                if periodic:
+                    long_r_interactions = get_longest_r_interactions_square(Nx)
+                    Cz_L_2,Cz_L_2_err = calculate_longrC(long_r_interactions,SziSzj)
+                    np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
+                    np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
+                    print(f"Cz(L/2,L/2) = {Cz_L_2}")
 
     if PRINT:
         print(f"\n Done calculating correlation matrices... "
@@ -544,40 +647,45 @@ def estimate_(config: dict):
 if __name__ == "__main__":
     devices = tf.config.list_logical_devices("CPU")
     print(devices)
+    from utils import LRSchedule_decay
+
+    data_path_prepend = '/mnt/ceph/users/smoss/HeisenbergRNN'
+    scale=1.0
+    rate=0.475
+    number_of_annealing_step = 10000
 
     config_test = {
         # Seeding for reproducibility purposes
-        'seed': 0,
-        'experiment_name': 'testing',
+        'seed': 100,
+        'data_path_prepend': data_path_prepend,
+        'experiment_name': 'Dec6_test',
 
         #### System
         'Hamiltonian': 'AFHeisenberg',
         'boundary_condition': 'periodic',
         'Apply_MS': True,
-        'Nx': 4,  # number of sites in x-direction
-        'Ny': 4,  # number of sites in the y-direction
+        'Nx': 6,  # number of sites in x-direction
+        'Ny': 6,  # number of sites in the y-direction
 
         #### RNN
-        'RNN_Type': 'TwoD',
-        'units': 16,  # number of memory/hidden units
-        'use_complex': False,  # weights shared between RNN cells or not
+        'units': 256,  # number of memory/hidden units
+        'use_complex': 0,  # weights shared between RNN cells or not
         'num_samples': 100,  # Batch size
-        'lr': 5e-4,  # learning rate
+        'lr': LRSchedule_decay(5e-4, 1000 + (5 * int(scale * number_of_annealing_step)),
+                                        int(scale * 5000)),
         'gradient_clip': True,
         'tf_dtype': tf.float32,
 
         #### Annealing
-        'scale': 1.,
-        'rate': 0.25,
-        'Tmax': 0,
+        'Tmax': 0,  # Highest temperature, if Tmax=0 then its VMC, ***add if statement to skip annealing if Tmax = 0
         'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
-        'num_annealing_steps': 1000,  # number of annealing steps
+        'num_annealing_steps': int(scale * number_of_annealing_step),  # number of annealing steps
         'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
-        'num_training_steps': 0,  # number of training steps
+        'num_training_steps': int(scale * 50000),  # number of training steps
 
         #### Symmetries
         'h_symmetries': True,
-        'l_symmetries': False,
+        'l_symmetries': True,
         'spin_parity': False,
 
         #### Other
@@ -587,13 +695,16 @@ if __name__ == "__main__":
         'TRAIN': True,  # whether to train the model
 
         'strategy': tf.distribute.OneDeviceStrategy(devices[0].name),
+        # 'strategy': tf.distribute.MirroredStrategy(),
 
-        'ENERGY': True,
-        'num_samples_final_energy_estimate': 1000,
+        'ENERGY': False,
         'CORRELATIONS_MATRIX': True,
-        'Sk_from_Si': True,
         'correlation_mode': 'Sxyz',
-        'num_samples_final_correlations_estimate': 10000,
+        'only_longest_r': False,
+        'num_samples_final_correlations_estimate': 1000,
+
+        'scale': scale,
+        'rate': rate,
     }
 
     estimate_(config_test)

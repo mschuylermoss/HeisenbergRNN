@@ -9,15 +9,6 @@ default_kx = np.pi
 default_ky = np.pi
 
 
-def get_longest_r_interactions_square(L):
-    all_interactions = buildlattice_alltoall_primitive_vector(L, p1=default_p1, p2=default_p2, periodic=True)
-    longest_r_interactions = []
-    for idx, r in all_interactions.items():
-        if (abs(r[0]) == L / 2) & (abs(r[1]) == L / 2):
-            longest_r_interactions.append(idx)
-    return longest_r_interactions
-
-
 def calculate_all_kspace_correlations(L: int, Sij: np.ndarray, kx_mesh: np.ndarray, ky_mesh: np.ndarray,
                                       p1=default_p1, p2=default_p2,
                                       snake=False,
@@ -25,9 +16,9 @@ def calculate_all_kspace_correlations(L: int, Sij: np.ndarray, kx_mesh: np.ndarr
     Sk = np.zeros((len(kx_mesh), len(ky_mesh)), dtype=complex)
     interactions_r = buildlattice_alltoall_primitive_vector(L, p1, p2, snake, periodic)
     for idx, r in interactions_r.items():
-        Sk += np.exp(1j * (r[0] * kx_mesh[:, np.newaxis] + r[1] * ky_mesh[np.newaxis, :])) * 0.25 * Sij[idx]
+        Sk += np.exp(1j * (r[0] * kx_mesh[:, np.newaxis] + r[1] * ky_mesh[np.newaxis, :])) * Sij[idx]
         if idx[0] != idx[1]:
-            Sk += np.exp(-1j * (r[0] * kx_mesh[:, np.newaxis] + r[1] * ky_mesh[np.newaxis, :])) * 0.25 * Sij[idx]
+            Sk += np.exp(-1j * (r[0] * kx_mesh[:, np.newaxis] + r[1] * ky_mesh[np.newaxis, :])) * Sij[idx]
     Sk /= L ** 2
     return np.real(Sk)
 
@@ -42,17 +33,44 @@ def calculate_structure_factor(L: int, Sij: np.ndarray,
     Sk = 0
     Sk_var = 0
     for idx, r in interactions_r.items():
-        Sk += np.exp(1j * (r[0] * kx + r[1] * ky)) * 0.25 * Sij[idx]
+        Sk += np.exp(1j * (r[0] * kx + r[1] * ky)) * Sij[idx]
         if idx[0] != idx[1]:
-            Sk += np.exp(-1j * (r[0] * kx + r[1] * ky)) * 0.25 * Sij[idx]
+            Sk += np.exp(-1j * (r[0] * kx + r[1] * ky)) * Sij[idx]
         if var_Sij is not None:
-            Sk_var += (np.exp(-1j * (r[0] * kx + r[1] * ky)) * 0.25) ** 2 * var_Sij[idx]
+            Sk_var += np.exp(1j * (r[0] * kx + r[1] * ky)) ** 2 * var_Sij[idx]
             if idx[0] != idx[1]:
-                Sk_var += (np.exp(-1j * (r[0] * kx + r[1] * ky)) * 0.25) ** 2 * var_Sij[idx]
+                Sk_var += np.exp(-1j * (r[0] * kx + r[1] * ky)) ** 2 * var_Sij[idx]
     Sk /= L ** 2
-    Sk_err = np.sqrt(Sk_var) / L ** 2
-    return np.real(Sk), np.real(Sk_err)
+    Sk_var /= L ** 4
+    return np.real(Sk), np.real(Sk_var)
 
+def calculate_structure_factor_bootstrapped(L: int, Sij: np.ndarray, var_Sij:np.ndarray,
+                               kx=default_kx, ky=default_ky,
+                               p1=default_p1, p2=default_p2,
+                               snake=False,
+                               periodic=False,
+                               num_bootstraps=10000):
+    interactions_r = buildlattice_alltoall_primitive_vector(L, p1, p2, snake, periodic)
+    Sks = []
+    for b in range(num_bootstraps):
+        np.random.seed(b)
+        random_vars = np.random.normal(size=np.shape(Sij))
+        Sij_b = Sij + random_vars * var_Sij
+        Sk = 0
+        Sk_var = 0
+        for idx, r in interactions_r.items():
+            Sk += np.exp(1j * (r[0] * kx + r[1] * ky)) * Sij_b[idx]
+            if idx[0] != idx[1]:
+                Sk += np.exp(-1j * (r[0] * kx + r[1] * ky)) * Sij_b[idx]
+            if var_Sij is not None:
+                Sk_var += np.exp(1j * (r[0] * kx + r[1] * ky)) ** 2 * var_Sij[idx]
+                if idx[0] != idx[1]:
+                    Sk_var += np.exp(-1j * (r[0] * kx + r[1] * ky)) ** 2 * var_Sij[idx]
+        Sk /= L ** 2
+        Sks.append(Sk)
+    Sk_bootstrapped = np.mean(Sks)
+    Sk_var_bootstrapped = np.var(Sks) 
+    return np.real(Sk_bootstrapped), Sk_var_bootstrapped
 
 def calculate_expectation_ft_Si_square(L: int,
                                        Sis: np.ndarray,
@@ -68,40 +86,6 @@ def calculate_expectation_ft_Si_square(L: int,
     mean_ft_Si = np.mean(abs(ft_Si) ** 2)
     var_ft_Si = np.var(abs(ft_Si) ** 2)
     return mean_ft_Si, var_ft_Si
-
-
-def get_batched_interactions_Jmats(L, interactions, interactions_batch_size, tf_dtype):
-    num_batches = len(interactions) // interactions_batch_size
-    J_matrix_list = {}
-    interactions_list = {}
-
-    for batch in range(num_batches):
-        start = batch * interactions_batch_size
-        stop = (batch + 1) * interactions_batch_size
-        interactions_batch = interactions[start:stop]
-        J_mat = np.zeros((len(interactions_batch), L ** 2))
-        for n, interaction in enumerate(interactions_batch):
-            i, j = interaction
-            J_mat[n, i] += 1
-            J_mat[n, j] += 1
-        J_matrix = tf.constant(J_mat, dtype=tf_dtype)
-        J_matrix_list[batch] = J_matrix
-        interactions_list[batch] = interactions_batch
-
-    if num_batches * interactions_batch_size != len(interactions):
-        start = num_batches * interactions_batch_size
-        interactions_batch = interactions[start:]
-        J_mat = np.zeros((len(interactions_batch), L ** 2))
-        for n, interaction in enumerate(interactions_batch):
-            i, j = interaction
-            J_mat[n, i] += 1
-            J_mat[n, j] += 1
-        J_matrix = tf.constant(J_mat, dtype=tf_dtype)
-        J_matrix_list[num_batches] = J_matrix
-        interactions_list[num_batches] = interactions_batch
-
-    return J_matrix_list, interactions_list
-
 
 def get_Si(log_fxn, tf_dtype=tf.float32):
     def Sxyi_vectorized(samples, og_amps):
@@ -143,13 +127,13 @@ def get_Heisenberg_realspace_Correlation_Vectorized(log_fxn, tf_dtype=tf.float32
         amp_ratio = tf.math.exp(tf.reshape(flip_logamp, (-1, num_interactions)) - og_amps[:, tf.newaxis])
         xx = amp_ratio
         yy = -1 * signs * amp_ratio
-        return xx + yy
+        return 0.25 * (xx + yy)
 
     @tf.function()
     def Heisenberg_realspace_Correlation_Vectorized_zz(samples, J_matrix):
         zz = tf.math.abs(J_matrix @ (2 * tf.transpose(samples) - 1)) - 1
         zz = tf.complex(tf.transpose(zz), tf.cast(0.0, dtype=tf_dtype))
-        return zz
+        return 0.25 * (zz)
 
     return Heisenberg_realspace_Correlation_Vectorized_xx_yy, Heisenberg_realspace_Correlation_Vectorized_zz
 
@@ -164,3 +148,21 @@ def undo_marshall_sign(L):
         no_minus = ((s1 in A_sites) ^ (s2 in B_sites)) or ((s1 in B_sites) ^ (s2 in A_sites))
         minus_signs_matrix[s1, s2] = 2 * no_minus - 1
     return minus_signs_matrix
+
+
+def calculate_longrC(longr_interactions, Sij, var_Sij=None):
+    to_sum = []
+    vars_to_sum = []
+    for interaction in longr_interactions:
+        Sij_int = Sij[interaction[0],interaction[1]]
+        to_sum.append(Sij_int)
+        if var_Sij is not None:
+            var_Sij_int = var_Sij[interaction[0],interaction[1]]
+            vars_to_sum.append(var_Sij_int)
+    to_sum_np = np.array(to_sum)
+    if var_Sij is not None:
+        vars_to_sum_np = np.array(vars_to_sum)
+        total_var = np.sum(vars_to_sum_np) / (len(vars_to_sum_np)**2)
+    else:
+        total_var = np.var(to_sum_np)
+    return np.mean(to_sum_np), total_var

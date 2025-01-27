@@ -283,7 +283,7 @@ if __name__ == '__main__':
     if schedule == 'rate':
         configs = [config_step1.copy(), config_step2.copy(), config_step3.copy(), ]
 
-        L_list = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36]
+        L_list = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32] #, 36]
         for _L in L_list:
             new_conf = configs[-1].copy()
             new_conf["previous_config"] = new_conf.copy()
@@ -292,6 +292,26 @@ if __name__ == '__main__':
             new_conf["lr"] = LRSchedule_constant(1e-5 )
             new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
             configs.append(new_conf.copy())
+
+    if schedule == 'times':
+        configs = [config_step3.copy(), ]
+
+        L_list = [6, 8, 10, 12, 14, 16, 18, 20, 24, 28, 32] #, 36]
+        for _L in L_list:
+            new_conf = configs[-1].copy()
+            new_conf["previous_config"] = None
+            new_conf["Nx"] = _L
+            new_conf["Ny"] = _L
+            new_conf["lr"] = LRSchedule_constant(1e-5 )
+            new_conf['num_warmup_steps']        = 0
+            new_conf['num_annealing_steps']     = 0
+            new_conf['num_equilibrium_steps']   = 1
+            new_conf["num_training_steps"]      = 500
+            new_conf["ENERGY"] = False
+            new_conf["CORRELATIONS_MATRIX"] = False
+            configs.append(new_conf.copy())
+        
+        configs = configs[1:]
 
     if path:
         # Only print the path of the last config.
@@ -315,11 +335,19 @@ if __name__ == '__main__':
             conf['task_id'] = task_id
             conf['scale'] = scale
             conf['rate'] = rate
+            # need to chunk for largest L
+            if conf['Nx'] >= 32:
+                conf['chunk_size'] = 5
+            # dont calculate full correlations past L=20 
+            if conf['Nx'] > 20:
+                if conf['boundary_condition'] == 'periodic':
+                    conf['only_longest_r'] = True
+                else:
+                    conf['CORRELATIONS_MATRIX'] = False
+            # dont need to retrace/retrain for Ls that are complete
             if conf['Nx'] < 32:
                 conf['TRAIN'] = False
-            if conf['Nx'] > 20:
-                conf['CORRELATIONS_MATRIX'] = False
-                conf['chunk'] = True
+            
             train_(conf)
             estimate_(conf)
             tf.keras.backend.clear_session()

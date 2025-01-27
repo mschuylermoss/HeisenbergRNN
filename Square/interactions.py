@@ -1,3 +1,9 @@
+import numpy as np
+import tensorflow as tf
+
+default_p1 = (1, 0)
+default_p2 = (0, 1)
+
 def coord_to_site_bravais(L, x, y, snake=False):
     if snake and (y % 2 == 1):
         return L * y + L - x - 1
@@ -56,7 +62,7 @@ def buildlattice_alltoall(L, snake=False):
     return interactions
 
 
-def buildlattice_alltoall_primitive_vector(L: int, p1, p2, snake=False, periodic=False):
+def buildlattice_alltoall_primitive_vector(L: int, p1=default_p1, p2=default_p2, snake=False, periodic=False):
     interactions = {}
     N_spins = L ** 2
 
@@ -90,6 +96,15 @@ def buildlattice_alltoall_primitive_vector(L: int, p1, p2, snake=False, periodic
                 interactions[interaction] = (delta_x, delta_y)
 
     return interactions
+
+
+def get_longest_r_interactions_square(L):
+    all_interactions = buildlattice_alltoall_primitive_vector(L, p1=default_p1, p2=default_p2, periodic=True)
+    longest_r_interactions = []
+    for idx, r in all_interactions.items():
+        if (abs(r[0]) == L / 2) & (abs(r[1]) == L / 2):
+            longest_r_interactions.append(idx)
+    return longest_r_interactions
 
 
 def generate_sublattices_square(Lx, Ly, snake=False):
@@ -143,3 +158,35 @@ def generate_lattices_boundary(Lx, Ly, snake=False):
                 bulk_sites.append(coord_fn(nx, ny))
 
     return corner_coords, boundary_coords, bulk_coords, corner_sites, boundary_sites, bulk_sites
+
+def get_batched_interactions_Jmats(L, interactions, interactions_batch_size, tf_dtype):
+    num_batches = len(interactions) // interactions_batch_size
+    J_matrix_list = {}
+    interactions_list = {}
+
+    for batch in range(num_batches):
+        start = batch * interactions_batch_size
+        stop = (batch + 1) * interactions_batch_size
+        interactions_batch = interactions[start:stop]
+        J_mat = np.zeros((len(interactions_batch), L ** 2))
+        for n, interaction in enumerate(interactions_batch):
+            i, j = interaction
+            J_mat[n, i] += 1
+            J_mat[n, j] += 1
+        J_matrix = tf.constant(J_mat, dtype=tf_dtype)
+        J_matrix_list[batch] = J_matrix
+        interactions_list[batch] = interactions_batch
+
+    if num_batches * interactions_batch_size != len(interactions):
+        start = num_batches * interactions_batch_size
+        interactions_batch = interactions[start:]
+        J_mat = np.zeros((len(interactions_batch), L ** 2))
+        for n, interaction in enumerate(interactions_batch):
+            i, j = interaction
+            J_mat[n, i] += 1
+            J_mat[n, j] += 1
+        J_matrix = tf.constant(J_mat, dtype=tf_dtype)
+        J_matrix_list[num_batches] = J_matrix
+        interactions_list[num_batches] = interactions_batch
+
+    return J_matrix_list, interactions_list
