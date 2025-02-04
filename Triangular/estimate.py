@@ -36,6 +36,7 @@ def estimate_energy(config, save_path, energy_fxn, sample_fxn, log_fxn, strategy
     batch_size = config.get('num_samples', 1024)
     Nx = config['Nx']
     Ny = config['Ny']
+    chunk_size = config.get('chunk_size', None)
     N_spins = Nx * Ny
 
     num_batches = num_samples_final_energy_estimate // batch_size
@@ -58,15 +59,28 @@ def estimate_energy(config, save_path, energy_fxn, sample_fxn, log_fxn, strategy
         os.makedirs(save_path + ens_final_directory)
 
     if num_samples_final_energy_estimate is not None:
+        @tf.function()
+        def chunks(acc, elems):
+            print(f"Tracing chunks of size {chunk_size}")
+            idx, ta = acc
+            return idx + 1, tf.stop_gradient(energy_fxn(elems[0], elems[1]))
 
         @tf.function()
         def final_energy_single():
             print(f"Tracing single energy calculation")
 
             samples_tf = sample_fxn(num_samples_per_device)
-
             log_probs_tf, log_amps_tf = log_fxn(samples_tf)
-            local_energies_tf = energy_fxn(samples_tf, log_amps_tf)
+            if chunk_size is None:
+                local_energies_tf = energy_fxn(samples_tf, log_amps_tf)
+            else:
+                samples_tf_split = tf.stack(tf.split(samples_tf, chunk_size))
+                log_amps_tf_split = tf.stack(tf.split(log_amps_tf, chunk_size))
+                init_tensor = tf.zeros(num_samples_per_device // chunk_size, dtype=log_amps_tf.dtype)
+                idx, local_energies_tf = tf.scan(chunks, elems=(samples_tf_split, log_amps_tf_split),
+                                                 initializer=(0, init_tensor),
+                                                 parallel_iterations=1, infer_shape=False)
+                local_energies_tf = tf.reshape(local_energies_tf, (num_samples_per_device,))
             return tf.stack([tf.math.real(local_energies_tf),
                              tf.math.imag(local_energies_tf)], axis=-1)
 
@@ -148,7 +162,7 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
         os.makedirs(save_path + corr_final_directory)
 
     interactions = buildlattice_alltoall(Nx)
-    _,_, triangular_interactions = buildlattice_triangular(Nx, Ny, bc=bc)
+    _, _, triangular_interactions = buildlattice_triangular(Nx, Ny, bc=bc)
     interactions_batch_size = len(triangular_interactions)  # number of first order
     J_matrix_list, interactions_batched = get_batched_interactions_Jmats(Nx, interactions,
                                                                          interactions_batch_size, tf_dtype)
@@ -516,8 +530,8 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
         J_mat_batch = J_matrix_list_diff[batch_i]
         interactions_batch = np.array(interactions_batched_diff[batch_i])
         if correlation_mode == 'Sxyz':
-            J_matrix_is_np = np.zeros((len(interactions_batch),N_spins))
-            J_matrix_js_np = np.zeros((len(interactions_batch),N_spins))
+            J_matrix_is_np = np.zeros((len(interactions_batch), N_spins))
+            J_matrix_js_np = np.zeros((len(interactions_batch), N_spins))
             for n, _ in enumerate(interactions_batch):
                 i = interactions_batch[n][0]
                 J_matrix_is_np[n, i] += 1
@@ -630,35 +644,35 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
         if correlation_mode == 'Sxyz':
             SiSj = sz_matrix + sxy_matrix
             var_SiSj = var_sz_matrix + var_sxy_matrix
-            SziSzj = 3*sz_matrix
-            var_SziSzj = 3*var_sz_matrix
-            SxyiSxyj = (3/2)*sxy_matrix
-            var_SxyiSxyj = (3/2)*var_sxy_matrix
+            SziSzj = 3 * sz_matrix
+            var_SziSzj = 3 * var_sz_matrix
+            SxyiSxyj = (3 / 2) * sxy_matrix
+            var_SxyiSxyj = (3 / 2) * var_sxy_matrix
             Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
-            err_Sk = np.sqrt(var_Sk)/np.sqrt(num_samples_final_correlations_estimate)
+            err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SiSj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SiSj', err_Sk)
             print(f"Sk (from <SiSj>) = {Sk}")
             print(var_Sk)
             print(err_Sk)
             Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic)
-            err_Skz = np.sqrt(var_Skz)/np.sqrt(num_samples_final_correlations_estimate)
+            err_Skz = np.sqrt(var_Skz) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
             print(f"Sk (from <SziSzj>) = {Skz}")
             print(var_Skz)
             print(err_Skz)
             Skxy, var_Skxy = calculate_structure_factor(Nx, SxyiSxyj, var_Sij=var_SxyiSxyj, periodic=periodic)
-            err_Skxy = np.sqrt(var_Skxy)/np.sqrt(num_samples_final_correlations_estimate)
+            err_Skxy = np.sqrt(var_Skxy) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SxyiSxyj', Skxy)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SxyiSxyj', err_Skxy)
             print(f"Sk (from <SxyiSxyj>) = {Skxy}")
-            
+
         else:
             SiSj = 3 * sz_matrix
             var_SiSj = 3 * var_sz_matrix
             Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
-            err_Sk = np.sqrt(var_Sk)/np.sqrt(num_samples_final_correlations_estimate)
+            err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Sk)
             print(f"Sk (from <SziSzj>) = {Sk}")
@@ -666,6 +680,7 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
     if PRINT:
         print(f"\n Done calculating correlation matrices... "
               f"(calculated with {num_samples_final_correlations_estimate} samples)")
+
 
 def estimate_(config: dict):
     print("\nEstimating...")
@@ -683,7 +698,7 @@ def estimate_(config: dict):
     # Get save path
     data_path_prepend = config.get('data_path_prepend', './data/')
     task_id = config.get('task_id', 0)
-    T0 = config['Tmax']
+    T0 = config['T0']
     h_symmetries = config.get('h_symmetries', False)
     l_symmetries = config.get('l_symmetries', False)
     spin_parity = config.get('spin_parity', False)
@@ -706,14 +721,16 @@ def estimate_(config: dict):
     # 10. Final Correlations Matrix: 
     # ----------------------------------------------------------------------------------------------
     if CORRELATIONS_MATRIX:
-        if config['which_MS']=='Square':
+        if config['which_MS'] == 'Square':
             estimate_correlations_distributed(config, save_path, RNNWF.sample,
-                                            lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries, parity=spin_parity),
-                                            strategy)
-        elif config['which_MS']=='Triangular':
+                                              lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries,
+                                                                            parity=spin_parity),
+                                              strategy)
+        elif config['which_MS'] == 'Triangular':
             estimate_correlations_distributed_TriMS(config, save_path, RNNWF.sample,
-                                            lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries, parity=spin_parity),
-                                            strategy)
+                                                    lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries,
+                                                                                  parity=spin_parity),
+                                                    strategy)
 
     return RNNWF
 
@@ -739,7 +756,7 @@ if __name__ == "__main__":
         'RNN_Type': 'TwoD',
         'units': 16,  # number of memory/hidden units
         'weight_sharing': 'all',
-        'use_complex': True, 
+        'use_complex': True,
         'num_samples': 100,  # Batch size
         'lr': LRSchedule_constant(5e-4),  # learning rate
         'gradient_clip': True,
@@ -766,7 +783,7 @@ if __name__ == "__main__":
         'TRAIN': True,  # whether to train the model
 
         'strategy': tf.distribute.OneDeviceStrategy(devices[0].name),
-   
+
         'ENERGY': False,
         'num_samples_final_energy_estimate': 1000,
         'CORRELATIONS_MATRIX': True,

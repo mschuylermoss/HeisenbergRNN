@@ -219,7 +219,11 @@ def train_(config: dict):
     print(f"Total number of GPUs: {number_of_replicas}")
     num_samples_per_device = int(np.ceil(num_samples / number_of_replicas))
     print(f"Number of samples per device: {num_samples_per_device}\n")
-
+    if chunk_size is not None:
+        assert int(num_samples_per_device//chunk_size)== num_samples_per_device/chunk_size,\
+            f'`num_samples_per_device`={num_samples_per_device} is not divisible by `chunk_size`={chunk_size}'
+        print(f"Chunk size = {chunk_size}")
+        print(f"Number of samples per device: {num_samples_per_device//chunk_size} (chunked)\n")
     # Variable created inside scope:
     RNN_x = Nx  # same as underlying square lattice
     RNN_y = Ny  # same as underlying square lattice
