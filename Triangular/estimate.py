@@ -481,7 +481,7 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
         tf_dtype=tf_dtype)
 
     @tf.function()
-    def distributed_rsp_corr_fxn_zz_xx_yy_same(samples, logamps, j_matrix, j_matrix_i, j_matrix_j):
+    def distributed_rsp_corr_fxn_zz_xx_yy_same(samples, logamps, j_matrix):
         print("Tracing distributed xx_yy_zz")
 
         @tf.function()
@@ -526,7 +526,7 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
 
     for batch_i in range(num_interaction_batches_diff):
         timestart = time.time()
-        print(f"Calculating correlations for interaction batch {batch_i + 1}/{num_interaction_batches_diff}")
+        print(f"Calculating correlations for (diff sublattice) interaction batch {batch_i + 1}/{num_interaction_batches_diff}")
         J_mat_batch = J_matrix_list_diff[batch_i]
         interactions_batch = np.array(interactions_batched_diff[batch_i])
         if correlation_mode == 'Sxyz':
@@ -540,7 +540,7 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
             J_mat_is_batch = tf.constant(J_matrix_is_np, dtype=tf_dtype)
             J_mat_js_batch = tf.constant(J_matrix_js_np, dtype=tf_dtype)
         if not np.isnan(sz_matrix[interactions_batch[0, 0], interactions_batch[0, 1]]):
-            print(f"Correlations for interaction batch {batch_i + 1} already calculated (diff sublattice)!")
+            print(f"Correlations for (diff sublattice) interaction batch {batch_i + 1} already calculated!")
             continue
         batch_means_sxy = np.zeros((num_sample_batches, len(interactions_batch)))
         batch_means_sz = np.zeros((num_sample_batches, len(interactions_batch)))
@@ -589,11 +589,11 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
 
     for batch_i in range(num_interaction_batches_same):
         timestart = time.time()
-        print(f"Calculating correlations for interaction batch {batch_i + 1}/{num_interaction_batches_same}")
+        print(f"Calculating correlations for (same sublattice) interaction batch {batch_i + 1}/{num_interaction_batches_same}")
         J_mat_batch = J_matrix_list_same[batch_i]
         interactions_batch = np.array(interactions_batched_same[batch_i])
         if not np.isnan(sz_matrix[interactions_batch[0, 0], interactions_batch[0, 1]]):
-            print(f"Correlations for interaction batch {batch_i + 1} already calculated (same sublattice)!")
+            print(f"Correlations for (same sublattice) interaction batch {batch_i + 1} already calculated!")
             continue
         batch_means_sxy = np.zeros((num_sample_batches, len(interactions_batch)))
         batch_means_sz = np.zeros((num_sample_batches, len(interactions_batch)))
@@ -765,7 +765,8 @@ if __name__ == "__main__":
         #### Annealing
         'scale': 1.,
         'rate': 0.25,
-        'Tmax': 0,
+        'T0': 0,
+        'T0_L_6': 0,
         'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
         'num_annealing_steps': 1000,  # number of annealing steps
         'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
