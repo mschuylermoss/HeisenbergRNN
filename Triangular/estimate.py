@@ -375,12 +375,15 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
     if not os.path.exists(save_path + corr_final_directory) and task_id == 0:
         os.makedirs(save_path + corr_final_directory)
 
-    interactions = buildlattice_alltoall(Nx)
+    same_sublattice, diff_sublattice, all_interactions = buildlattice_alltoall(Nx)
     _,_, triangular_interactions = buildlattice_triangular(Nx, Ny, bc=bc)
     interactions_batch_size = len(triangular_interactions)  # number of first order
-    J_matrix_list, interactions_batched = get_batched_interactions_Jmats(Nx, interactions,
+    J_matrix_list_diff, interactions_batched_diff = get_batched_interactions_Jmats(Nx, diff_sublattice,
                                                                          interactions_batch_size, tf_dtype)
-    num_interaction_batches = len(J_matrix_list.keys())
+    J_matrix_list_same, interactions_batched_same = get_batched_interactions_Jmats(Nx, same_sublattice,
+                                                                         interactions_batch_size, tf_dtype)
+    num_interaction_batches_diff = len(J_matrix_list_diff.keys())
+    num_interaction_batches_same = len(J_matrix_list_same.keys())
     path_exists_Sxy = os.path.exists(save_path + corr_final_directory + f'/Sxy_matrix.npy')
     path_exists_Sz = os.path.exists(save_path + corr_final_directory + f'/Sz_matrix.npy')
 
@@ -459,12 +462,12 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
             sxy_matrix = np.load(save_path + corr_final_directory + f'/Sxy_matrix.npy')
             var_sxy_matrix = np.load(save_path + corr_final_directory + f'/var_Sxy_matrix.npy')
 
-    rsp_corr_fxn_xx_yy, rsp_corr_fxn_zz = get_Heisenberg_realspace_Correlation_Vectorized_TriMS(
+    rsp_corr_fxn_xx_yy_same, rsp_corr_fxn_xx_yy_diff, rsp_corr_fxn_zz = get_Heisenberg_realspace_Correlation_Vectorized_TriMS(
         log_fxn,
         tf_dtype=tf_dtype)
 
     @tf.function()
-    def distributed_rsp_corr_fxn_zz_xx_yy(samples, logamps, j_matrix, j_matrix_i, j_matrix_j):
+    def distributed_rsp_corr_fxn_zz_xx_yy_same(samples, logamps, j_matrix, j_matrix_i, j_matrix_j):
         print("Tracing distributed xx_yy_zz")
 
         @tf.function()
@@ -475,7 +478,23 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
 
         samples_distributed, logpsis_distributed = strategy.experimental_distribute_values_from_function(value_fn)
         zz = strategy.run(lambda _x, _J: tf.math.real(rsp_corr_fxn_zz(_x, _J)), args=(samples_distributed, j_matrix,))
-        xx_yy = strategy.run(lambda _x, _y, _J, _Ji, _Jj: tf.math.real(rsp_corr_fxn_xx_yy(_x, _y, _J, _Ji, _Jj)),
+        xx_yy = strategy.run(lambda _x, _y, _J: tf.math.real(rsp_corr_fxn_xx_yy_same(_x, _y, _J)),
+                             args=(samples_distributed, logpsis_distributed, j_matrix,))
+        return strategy.gather(zz, axis=0), strategy.gather(xx_yy, axis=0)
+    
+    @tf.function()
+    def distributed_rsp_corr_fxn_zz_xx_yy_diff(samples, logamps, j_matrix, j_matrix_i, j_matrix_j):
+        print("Tracing distributed xx_yy_zz")
+
+        @tf.function()
+        def value_fn(ctx):
+            samples_chunked = tf.reshape(samples, (number_of_replicas, batch_size_per_device, N_spins))
+            logamps_chunked = tf.reshape(logamps, (number_of_replicas, batch_size_per_device))
+            return samples_chunked[ctx.replica_id_in_sync_group], logamps_chunked[ctx.replica_id_in_sync_group]
+
+        samples_distributed, logpsis_distributed = strategy.experimental_distribute_values_from_function(value_fn)
+        zz = strategy.run(lambda _x, _J: tf.math.real(rsp_corr_fxn_zz(_x, _J)), args=(samples_distributed, j_matrix,))
+        xx_yy = strategy.run(lambda _x, _y, _J, _Ji, _Jj: tf.math.real(rsp_corr_fxn_xx_yy_diff(_x, _y, _J, _Ji, _Jj)),
                              args=(samples_distributed, logpsis_distributed, j_matrix, j_matrix_i, j_matrix_j,))
         return strategy.gather(zz, axis=0), strategy.gather(xx_yy, axis=0)
 
@@ -491,11 +510,11 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
         zz = strategy.run(lambda _x, _J: tf.math.real(rsp_corr_fxn_zz(_x, _J)), args=(samples_distributed, j_matrix,))
         return strategy.gather(zz, axis=0)
 
-    for batch_i in range(num_interaction_batches):
+    for batch_i in range(num_interaction_batches_diff):
         timestart = time.time()
-        print(f"Calculating correlations for interaction batch {batch_i + 1}/{num_interaction_batches}")
-        J_mat_batch = J_matrix_list[batch_i]
-        interactions_batch = np.array(interactions_batched[batch_i])
+        print(f"Calculating correlations for interaction batch {batch_i + 1}/{num_interaction_batches_diff}")
+        J_mat_batch = J_matrix_list_diff[batch_i]
+        interactions_batch = np.array(interactions_batched_diff[batch_i])
         if correlation_mode == 'Sxyz':
             J_matrix_is_np = np.zeros((len(interactions_batch),N_spins))
             J_matrix_js_np = np.zeros((len(interactions_batch),N_spins))
@@ -507,7 +526,7 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
             J_mat_is_batch = tf.constant(J_matrix_is_np, dtype=tf_dtype)
             J_mat_js_batch = tf.constant(J_matrix_js_np, dtype=tf_dtype)
         if not np.isnan(sz_matrix[interactions_batch[0, 0], interactions_batch[0, 1]]):
-            print(f"Correlations for interaction batch {batch_i + 1} already calculated!")
+            print(f"Correlations for interaction batch {batch_i + 1} already calculated (diff sublattice)!")
             continue
         batch_means_sxy = np.zeros((num_sample_batches, len(interactions_batch)))
         batch_means_sz = np.zeros((num_sample_batches, len(interactions_batch)))
@@ -518,8 +537,61 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
             samples_batch = all_samples[batch_s]
             if correlation_mode == 'Sxyz':
                 log_amps_batch = all_log_amps[batch_s]
-                sziszj, sxyisxyj = distributed_rsp_corr_fxn_zz_xx_yy(samples_batch, log_amps_batch, 
+                sziszj, sxyisxyj = distributed_rsp_corr_fxn_zz_xx_yy_diff(samples_batch, log_amps_batch, 
                                                                      J_mat_batch, J_mat_is_batch, J_mat_js_batch)
+            else:
+                sziszj = distributed_rsp_corr_fxn_zz(samples_batch, J_mat_batch)
+            batch_means_sz[batch_s, :] = np.mean(np.real(sziszj.numpy()), axis=0)
+            batch_vars_sz[batch_s, :] = np.var(np.real(sziszj.numpy()), axis=0)
+            if correlation_mode == 'Sxyz':
+                batch_means_sxy[batch_s, :] = np.mean(np.real(sxyisxyj.numpy()), axis=0)
+                batch_vars_sxy[batch_s, :] = np.var(np.real(sxyisxyj.numpy()), axis=0)
+
+        sz_allsamples = np.mean(batch_means_sz, axis=0)
+        var_sz_allsamples = np.mean(batch_vars_sz, axis=0) + np.var(batch_means_sz, axis=0)
+        if correlation_mode == 'Sxyz':
+            sxy_allsamples = np.mean(batch_means_sxy, axis=0)
+            var_sxy_allsamples = np.mean(batch_vars_sxy, axis=0) + np.var(batch_means_sxy, axis=0)
+
+        spin_is = interactions_batch[:, 0]
+        spin_js = interactions_batch[:, 1]
+        sz_matrix[spin_is, spin_js] = sz_allsamples
+        var_sz_matrix[spin_is, spin_js] = var_sz_allsamples
+        if correlation_mode == 'Sxyz':
+            sxy_matrix[spin_is, spin_js] = sxy_allsamples
+            var_sxy_matrix[spin_is, spin_js] = var_sxy_allsamples
+
+        if task_id == 0:
+            np.save(save_path + corr_final_directory + f'/Sz_matrix',
+                    sz_matrix)
+            np.save(save_path + corr_final_directory + f'/var_Sz_matrix',
+                    var_sz_matrix)
+            if correlation_mode == 'Sxyz':
+                np.save(save_path + corr_final_directory + f'/Sxy_matrix',
+                        sxy_matrix)
+                np.save(save_path + corr_final_directory + f'/var_Sxy_matrix',
+                        var_sxy_matrix)
+        print(f"Time per interaction batch: {time.time() - timestart}")
+
+    for batch_i in range(num_interaction_batches_same):
+        timestart = time.time()
+        print(f"Calculating correlations for interaction batch {batch_i + 1}/{num_interaction_batches_same}")
+        J_mat_batch = J_matrix_list_same[batch_i]
+        interactions_batch = np.array(interactions_batched_same[batch_i])
+        if not np.isnan(sz_matrix[interactions_batch[0, 0], interactions_batch[0, 1]]):
+            print(f"Correlations for interaction batch {batch_i + 1} already calculated (same sublattice)!")
+            continue
+        batch_means_sxy = np.zeros((num_sample_batches, len(interactions_batch)))
+        batch_means_sz = np.zeros((num_sample_batches, len(interactions_batch)))
+        batch_vars_sxy = np.zeros((num_sample_batches, len(interactions_batch)))
+        batch_vars_sz = np.zeros((num_sample_batches, len(interactions_batch)))
+        for batch_s in range(num_sample_batches):
+            print(f"sample batch {batch_s}/{num_sample_batches}")
+            samples_batch = all_samples[batch_s]
+            if correlation_mode == 'Sxyz':
+                log_amps_batch = all_log_amps[batch_s]
+                sziszj, sxyisxyj = distributed_rsp_corr_fxn_zz_xx_yy_same(samples_batch, log_amps_batch, 
+                                                                     J_mat_batch)
             else:
                 sziszj = distributed_rsp_corr_fxn_zz(samples_batch, J_mat_batch)
             batch_means_sz[batch_s, :] = np.mean(np.real(sziszj.numpy()), axis=0)

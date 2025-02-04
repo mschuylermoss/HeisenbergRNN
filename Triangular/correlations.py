@@ -127,7 +127,7 @@ def get_Heisenberg_realspace_Correlation_Vectorized_TriMS(log_fxn, tf_dtype=tf.f
         return 0.25 * zz
     
     # @tf.function()
-    def Heisenberg_Correlation_Vectorized_offdiag(samples, log_amps, J_matrix, J_matrix_is, J_matrix_js):
+    def Heisenberg_Correlation_Vectorized_offdiag_diff(samples, log_amps, J_matrix, J_matrix_is, J_matrix_js):
         N = tf.shape(samples)[1]
 
         samples_tiled = tf.repeat(samples[:, :, tf.newaxis], len(J_matrix), axis=2)
@@ -155,7 +155,24 @@ def get_Heisenberg_realspace_Correlation_Vectorized_TriMS(log_fxn, tf_dtype=tf.f
         yx_xy = yx_xy_coeff * (yx - xy)
         return 0.25 * (xx_yy + yx_xy)
 
-    return Heisenberg_Correlation_Vectorized_offdiag, Heisenberg_Correlation_Vectorized_diag
+    # @tf.function()
+    def Heisenberg_Correlation_Vectorized_offdiag_same(samples, og_amps, J_matrix):
+        N = tf.shape(samples)[1]
+        num_interactions = tf.shape(J_matrix)[0]
+        samples_tiled_not_flipped = tf.repeat(samples[:, :, tf.newaxis], num_interactions, axis=2)
+        samples_tiled_flipped = tf.math.mod(samples_tiled_not_flipped + tf.transpose(J_matrix)[tf.newaxis, :, :], 2)
+        samples_tiled_sub = samples_tiled_flipped - samples_tiled_not_flipped
+        signs = tf.complex(tf.math.abs(tf.reduce_sum(samples_tiled_sub, axis=1)) - 1, tf.cast(0.0, dtype=tf_dtype))
+        samples_tiled_flipped = tf.transpose(samples_tiled_flipped, perm=[0, 2, 1])
+        _, flip_logamp = log_fxn(tf.reshape(samples_tiled_flipped, (-1, N)))
+        amp_ratio = tf.math.exp(tf.reshape(flip_logamp, (-1, num_interactions)) - og_amps[:, tf.newaxis])
+
+        xx = amp_ratio
+        yy = -1 * signs * amp_ratio
+
+        return 0.25 * (xx + yy)
+
+    return Heisenberg_Correlation_Vectorized_offdiag_same, Heisenberg_Correlation_Vectorized_offdiag_diff, Heisenberg_Correlation_Vectorized_diag
 
 
 def undo_marshall_sign(L):
