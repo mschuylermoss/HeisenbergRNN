@@ -323,7 +323,7 @@ if __name__ == '__main__':
         sys.exit(0)
     else:
         def sigterm_handler(signum, frame):
-            print("enlarge_triangular.py: Received SIGTERM. Exiting gracefully...")
+            print("enlarging_square.py: Received SIGTERM. Exiting gracefully...")
             # Add any cleanup or finalization code here
             sys.exit(0)
 
@@ -344,11 +344,9 @@ if __name__ == '__main__':
                     conf['only_longest_r'] = True
                 else:
                     conf['CORRELATIONS_MATRIX'] = False
-            # dont need to retrace/retrain for Ls that are complete
-            if conf['Nx'] < 32:
-                conf['TRAIN'] = False
             
             train_(conf)
+            tf.keras.backend.clear_session()
             estimate_(conf)
             tf.keras.backend.clear_session()
 

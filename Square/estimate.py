@@ -181,7 +181,7 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
             print(f"Chunked! chunk_size={chunk_size}")
         print(f"Mode = {correlation_mode}")
 
-    corr_final_directory = f'/final_corrs/ns_{num_samples_final_correlations_estimate}'
+    corr_final_directory = f'/final_correlations/ns_{num_samples_final_correlations_estimate}'
     if not os.path.exists(save_path + corr_final_directory) and task_id == 0:
         os.makedirs(save_path + corr_final_directory)
 
@@ -365,18 +365,21 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
             var_SiSj = var_sz_matrix + var_sxy_matrix
             SziSzj = 3*sz_matrix
             var_SziSzj = 3*var_sz_matrix
-            SxyiSxyj = 3*sxy_matrix*undo_marshall_sign_minus_signs
-            var_SxyiSxyj = 3*var_sxy_matrix
+            SxyiSxyj = (3/2)*sxy_matrix*undo_marshall_sign_minus_signs
+            var_SxyiSxyj = (3/2)*var_sxy_matrix
             if only_longest_r:
-                C_L_2,C_L_2_err = calculate_longrC(interactions,SiSj)
+                C_L_2,C_L_2_var = calculate_longrC(interactions,SiSj,var_SiSj)
+                C_L_2_err = np.sqrt(C_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
                 np.save(save_path + corr_final_directory + f'/C_L_2', C_L_2)
                 np.save(save_path + corr_final_directory + f'/err_C_L_2', C_L_2_err)
                 print(f"C(L/2,L/2) = {C_L_2}")
-                Cz_L_2,Cz_L_2_err = calculate_longrC(interactions,SziSzj)
+                Cz_L_2,Cz_L_2_var = calculate_longrC(interactions,SziSzj,var_SziSzj)
+                Cz_L_2_err = np.sqrt(Cz_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
                 np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
                 np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
                 print(f"Cz(L/2,L/2) = {Cz_L_2}")
-                Cxy_L_2,Cxy_L_2_err = calculate_longrC(interactions,SxyiSxyj)
+                Cxy_L_2,Cxy_L_2_var = calculate_longrC(interactions,SxyiSxyj,var_SxyiSxyj)
+                Cxy_L_2_err = np.sqrt(Cxy_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
                 np.save(save_path + corr_final_directory + f'/Cxy_L_2', Cxy_L_2)
                 np.save(save_path + corr_final_directory + f'/err_Cxy_L_2', Cxy_L_2_err)
                 print(f"Cxy(L/2,L/2) = {Cxy_L_2}")
@@ -403,13 +406,13 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
                     np.save(save_path + corr_final_directory + f'/C_L_2', C_L_2)
                     np.save(save_path + corr_final_directory + f'/err_C_L_2', C_L_2_err)
                     print(f"C(L/2,L/2) = {C_L_2}")
-                    Cz_L_2,Cz_L_2_err = calculate_longrC(long_r_interactions,SziSzj)
-                    Cz_L_2_err = np.sqrt(Cz_L_2_err)/np.sqrt(num_samples_final_correlations_estimate)
+                    Cz_L_2,Cz_L_2_var = calculate_longrC(long_r_interactions,SziSzj,var_SziSzj)
+                    Cz_L_2_err = np.sqrt(Cz_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
                     np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
                     np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
                     print(f"Cz(L/2,L/2) = {Cz_L_2}")
-                    Cxy_L_2,Cxy_L_2_err = calculate_longrC(long_r_interactions,SxyiSxyj)
-                    Cxy_L_2_err = np.sqrt(Cxy_L_2_err)/np.sqrt(num_samples_final_correlations_estimate)
+                    Cxy_L_2,Cxy_L_2_var = calculate_longrC(long_r_interactions,SxyiSxyj,var_SxyiSxyj)
+                    Cxy_L_2_err = np.sqrt(Cxy_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
                     np.save(save_path + corr_final_directory + f'/Cxy_L_2', Cxy_L_2)
                     np.save(save_path + corr_final_directory + f'/err_Cxy_L_2', Cxy_L_2_err)
                     print(f"Cxy(L/2,L/2) = {Cxy_L_2}")
@@ -417,18 +420,21 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
             SziSzj = 3 * sz_matrix
             var_SziSzj = 3 * var_sz_matrix
             if only_longest_r:
-                Cz_L_2,Cz_L_2_err = calculate_longrC(interactions,SziSzj)
+                Cz_L_2,Cz_L_2_var = calculate_longrC(interactions,SziSzj,var_SziSzj)
+                Cz_L_2_err = np.sqrt(Cz_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
                 np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
                 np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
                 print(f"Cz(L/2,L/2) = {Cz_L_2}")
             else:
-                Skz, err_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic)
+                Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic)
+                err_Skz = np.sqrt(var_Skz)/np.sqrt(num_samples_final_correlations_estimate)
                 np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
                 np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
                 print(f"Skz (from <SziSzj>) = {Skz}")
                 if periodic:
                     long_r_interactions = get_longest_r_interactions_square(Nx)
-                    Cz_L_2,Cz_L_2_err = calculate_longrC(long_r_interactions,SziSzj)
+                    Cz_L_2,Cz_L_2_var = calculate_longrC(long_r_interactions,SziSzj,var_SziSzj)
+                    Cz_L_2_err = np.sqrt(Cz_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
                     np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
                     np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
                     print(f"Cz(L/2,L/2) = {Cz_L_2}")
@@ -664,11 +670,11 @@ if __name__ == "__main__":
         'Hamiltonian': 'AFHeisenberg',
         'boundary_condition': 'periodic',
         'Apply_MS': True,
-        'Nx': 6,  # number of sites in x-direction
-        'Ny': 6,  # number of sites in the y-direction
+        'Nx': 4,  # number of sites in x-direction
+        'Ny': 4,  # number of sites in the y-direction
 
         #### RNN
-        'units': 256,  # number of memory/hidden units
+        'units': 10,  # number of memory/hidden units
         'use_complex': 0,  # weights shared between RNN cells or not
         'num_samples': 100,  # Batch size
         'lr': LRSchedule_decay(5e-4, 1000 + (5 * int(scale * number_of_annealing_step)),
@@ -678,10 +684,10 @@ if __name__ == "__main__":
 
         #### Annealing
         'Tmax': 0,  # Highest temperature, if Tmax=0 then its VMC, ***add if statement to skip annealing if Tmax = 0
-        'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
-        'num_annealing_steps': int(scale * number_of_annealing_step),  # number of annealing steps
-        'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
-        'num_training_steps': int(scale * 50000),  # number of training steps
+        'num_warmup_steps': 0,  # number of warmup steps 1000 = default (also shouldn't be relevant if Tmax = 0)
+        'num_annealing_steps': 1000,  # number of annealing steps
+        'num_equilibrium_steps': 1,  # number of gradient steps at each temperature value
+        'num_training_steps': 0,  # number of training steps
 
         #### Symmetries
         'h_symmetries': True,
@@ -700,7 +706,8 @@ if __name__ == "__main__":
         'ENERGY': False,
         'CORRELATIONS_MATRIX': True,
         'correlation_mode': 'Sxyz',
-        'only_longest_r': False,
+        'only_longest_r': True,
+        'chunk_size': 5,
         'num_samples_final_correlations_estimate': 1000,
 
         'scale': scale,
