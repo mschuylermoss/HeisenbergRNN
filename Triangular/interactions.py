@@ -5,21 +5,13 @@ default_p1 = (1., 0.)
 default_p2 = (-1 / 2, np.sqrt(3) / 2)
 
 
-def coord_to_site_bravais(L, x, y, snake=False):
-    if snake and (y % 2 == 1):
-        return L * y + L - x - 1
-    else:
-        return L * y + x
+def coord_to_site_bravais(L, x, y):
+    return L * y + x
 
-
-def site_to_coord_bravais(L, site, snake=False):
+def site_to_coord_bravais(L, site):
     y = site // L
-    if snake and (y % 2 == 1):
-        x = L - (site - L * y + 1)
-    else:
-        x = site - L * y
+    x = site - L * y
     return x, y
-
 
 def generate_triangular(Nx, Ny, p1=default_p1, p2=default_p2):
     triangular_lattice = np.ones((Nx * Ny, 2))
@@ -35,12 +27,12 @@ def generate_triangular(Nx, Ny, p1=default_p1, p2=default_p2):
     return triangular_lattice
 
 
-def generate_sublattices_square(Lx, Ly, snake=False):
+def generate_sublattices_square(Lx, Ly):
     A_coords = []
     B_coords = []
     A_sites = []
     B_sites = []
-    coord_fn = lambda x, y: coord_to_site_bravais(Lx, x, y, snake)
+    coord_fn = lambda x, y: coord_to_site_bravais(Lx, x, y)
 
     for nx in range(Lx):
         for ny in range(Ly):
@@ -61,27 +53,31 @@ def generate_sublattices_square(Lx, Ly, snake=False):
 
     return A_coords, B_coords, A_sites, B_sites
 
-def reorder_interaction(_i_,_j_,sublattice_assignments):
+def reorder_interaction(_i_,_j_,sublattice_assignments,reorder=False):
     sublattice_i = sublattice_assignments[_i_]
     sublattice_j = sublattice_assignments[_j_]
-    if sublattice_j == (sublattice_i + 1) % 3:
-        interaction_i = _i_
-        interaction_j = _j_
-    elif sublattice_j == sublattice_i:
-        interaction_i = _i_
-        interaction_j = _j_
+    if reorder:
+        if sublattice_j == (sublattice_i + 1) % 3:
+            interaction_i = _i_
+            interaction_j = _j_
+        elif sublattice_j == sublattice_i:
+            interaction_i = _i_
+            interaction_j = _j_
+        else:
+            interaction_i = _j_
+            interaction_j = _i_
     else:
-        interaction_i = _j_
-        interaction_j = _i_
+        interaction_i = _i_
+        interaction_j = _j_
 
     return interaction_i, interaction_j
 
-def generate_sublattices_triangular(Lx, Ly, snake=False):
+def generate_sublattices_triangular(Lx, Ly):
     A_sites = []
     B_sites = []
     C_sites = []
     all_assignments = []
-    coord_fn = lambda x, y: coord_to_site_bravais(Lx, x, y, snake)
+    coord_fn = lambda x, y: coord_to_site_bravais(Lx, x, y)
 
     for nx in range(Lx):
         for ny in range(Ly):
@@ -120,22 +116,22 @@ def generate_sublattices_triangular(Lx, Ly, snake=False):
     return A_sites, B_sites, C_sites, all_assignments
 
 
-def buildlattice_triangular(Lx, Ly, bc="open", snake=False):
+def buildlattice_triangular(Lx, Ly, bc="open", reorder=False):
     assert Lx == Ly, 'Lx must be equal to Ly'
     assert bc in ['open', 'periodic']
     square_interactions = []
     diagonal_interactions = []
     all_interactions = []
-    coord_fn = lambda x, y: coord_to_site_bravais(Lx, x, y, snake)
+    coord_fn = lambda x, y: coord_to_site_bravais(Lx, x, y)
 
-    _, _, _, sublattices = generate_sublattices_triangular(Lx, Ly, snake)
+    _, _, _, sublattices = generate_sublattices_triangular(Lx, Ly)
 
     for n in range(Lx - 1):
         for n_ in range(Ly):
             # horizontal square lattice interactions (excluding boundary terms)
             site_i = coord_fn(n, n_)
             site_j = coord_fn(n + 1, n_)
-            int_i, int_j = reorder_interaction(site_i, site_j, sublattices)
+            int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
             square_interactions.append((int_i, int_j))
             all_interactions.append((int_i, int_j))
 
@@ -144,7 +140,7 @@ def buildlattice_triangular(Lx, Ly, bc="open", snake=False):
             # vertical square lattice interactions (excluding boundary terms)
             site_i = coord_fn(n, n_)
             site_j = coord_fn(n, n_ + 1)
-            int_i, int_j = reorder_interaction(site_i, site_j, sublattices)
+            int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
             square_interactions.append((int_i, int_j))
             all_interactions.append((int_i, int_j))
 
@@ -153,7 +149,7 @@ def buildlattice_triangular(Lx, Ly, bc="open", snake=False):
         for n_ in range(Ly - 1):
             site_i = coord_fn(n, n_)
             site_j = coord_fn(n + 1, n_ + 1)
-            int_i, int_j = reorder_interaction(site_i, site_j, sublattices)
+            int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
             diagonal_interactions.append((int_i, int_j))
             all_interactions.append((int_i, int_j))
 
@@ -161,14 +157,14 @@ def buildlattice_triangular(Lx, Ly, bc="open", snake=False):
         for n in range(Lx):
             site_i = coord_fn(n, Ly - 1)
             site_j = coord_fn(n, 0)
-            int_i, int_j = reorder_interaction(site_i, site_j, sublattices)
+            int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
             square_interactions.append((int_i, int_j))
             all_interactions.append((int_i, int_j))
 
         for n_ in range(Ly):
             site_i = coord_fn(Lx - 1, n_)
             site_j = coord_fn(0, n_)
-            int_i, int_j = reorder_interaction(site_i, site_j, sublattices)
+            int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
             square_interactions.append((int_i, int_j))
             all_interactions.append((int_i, int_j))
 
@@ -176,7 +172,7 @@ def buildlattice_triangular(Lx, Ly, bc="open", snake=False):
         for n in range(1, Lx):
             site_i = coord_fn(n, 0)
             site_j = coord_fn(n - 1, Ly - 1)
-            int_i, int_j = reorder_interaction(site_i, site_j, sublattices)
+            int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
             diagonal_interactions.append((int_i, int_j))
             all_interactions.append((int_i, int_j))
 
@@ -184,25 +180,25 @@ def buildlattice_triangular(Lx, Ly, bc="open", snake=False):
         for n_ in range(Ly - 1):
             site_i = coord_fn(Lx - 1, n_)
             site_j = coord_fn(0, n_ + 1)
-            int_i, int_j = reorder_interaction(site_i, site_j, sublattices)
+            int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
             diagonal_interactions.append((int_i, int_j))
             all_interactions.append((int_i, int_j))
 
         # corner interaction
         site_i = coord_fn(Lx - 1, Ly - 1)
         site_j = coord_fn(0, 0)
-        int_i, int_j = reorder_interaction(site_i, site_j, sublattices)
+        int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
         diagonal_interactions.append((int_i, int_j))
         all_interactions.append((int_i, int_j))
 
     return square_interactions, diagonal_interactions, all_interactions
 
-def buildlattice_alltoall(L, snake=False):
+def buildlattice_alltoall(L, reorder=False):
     same_sublattice = []
     diff_sublattice = []
     all_interactions = []
     N_spins = L ** 2
-    _, _, _, sublattices = generate_sublattices_triangular(L, L, snake)
+    _, _, _, sublattices = generate_sublattices_triangular(L, L)
 
     for i in range(N_spins):
         for j in range(i, N_spins):
@@ -210,11 +206,11 @@ def buildlattice_alltoall(L, snake=False):
             yi = i // L
             xj = j % L
             yj = j // L
-            site_i = coord_to_site_bravais(L, xi, yi, snake)
-            site_j = coord_to_site_bravais(L, xj, yj, snake)
+            site_i = coord_to_site_bravais(L, xi, yi)
+            site_j = coord_to_site_bravais(L, xj, yj)
             sublattice_i = sublattices[site_i]
             sublattice_j = sublattices[site_j]
-            int_i, int_j = reorder_interaction(site_i, site_j, sublattices)
+            int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
             interaction = [int_i,int_j]
             if sublattice_i == sublattice_j:
                 same_sublattice.append(interaction)
@@ -226,10 +222,10 @@ def buildlattice_alltoall(L, snake=False):
 def get_norm(vec):
     return vec[0]**2 + vec[1]**2
 
-def buildlattice_alltoall_primitive_vector(L: int, p1=default_p1, p2=default_p2, snake=False, periodic=False):
+def buildlattice_alltoall_primitive_vector(L: int, p1=default_p1, p2=default_p2, periodic=False, reorder=False):
     interactions = {}
     N_spins = L ** 2
-    _, _, _, sublattices = generate_sublattices_triangular(L, L, snake)
+    _, _, _, sublattices = generate_sublattices_triangular(L, L)
 
     for i in range(N_spins):
         for j in range(i, N_spins):
@@ -239,9 +235,9 @@ def buildlattice_alltoall_primitive_vector(L: int, p1=default_p1, p2=default_p2,
             xj_square = j % L
             yj_square = j // L
 
-            site_i = coord_to_site_bravais(L, xi_square, yi_square, snake)
-            site_j = coord_to_site_bravais(L, xj_square, yj_square, snake)
-            int_i, int_j = reorder_interaction(site_i, site_j, sublattices)
+            site_i = coord_to_site_bravais(L, xi_square, yi_square)
+            site_j = coord_to_site_bravais(L, xj_square, yj_square)
+            int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
             interaction = (int_i,int_j)
 
             delta_x_square = xj_square - xi_square

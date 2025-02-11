@@ -33,9 +33,9 @@ def calculate_structure_factor(L: int,
                                kx=default_kx, ky=default_ky, 
                                p1=default_p1, p2=default_p2, 
                                var_Sij=None, 
-                               snake=False,
-                               periodic=False):
-    interactions_r = buildlattice_alltoall_primitive_vector(L, p1, p2, snake, periodic)
+                               periodic=False,
+                               reorder=False):
+    interactions_r = buildlattice_alltoall_primitive_vector(L, p1, p2, periodic, reorder=reorder)
 
     Sk = 0
     Sk_var = 0
@@ -178,7 +178,8 @@ def get_Heisenberg_realspace_Correlation_Vectorized_TriMS(log_fxn, tf_dtype=tf.f
 def undo_marshall_sign(L):
     N = L ** 2
     _, _, A_sites, B_sites = generate_sublattices_square(L, L)
-    interactions = np.array(buildlattice_alltoall(L))
+    _,_,interactions_list = buildlattice_alltoall(L)
+    interactions = np.array(interactions_list)
     minus_signs_matrix = np.ones((N, N))
     for interaction in interactions:
         s1, s2 = interaction

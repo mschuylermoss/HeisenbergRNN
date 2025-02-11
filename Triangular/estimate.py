@@ -157,11 +157,11 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
         print(f"{number_of_replicas} devices, so batch size per device: {batch_size_per_device}")
         print(f"Mode = {correlation_mode}")
 
-    corr_final_directory = f'/final_corrs/ns_{num_samples_final_correlations_estimate}'
+    corr_final_directory = f'/final_correlations/ns_{num_samples_final_correlations_estimate}'
     if not os.path.exists(save_path + corr_final_directory) and task_id == 0:
         os.makedirs(save_path + corr_final_directory)
 
-    interactions = buildlattice_alltoall(Nx)
+    _,_,interactions = buildlattice_alltoall(Nx)
     _, _, triangular_interactions = buildlattice_triangular(Nx, Ny, bc=bc)
     interactions_batch_size = len(triangular_interactions)  # number of first order
     J_matrix_list, interactions_batched = get_batched_interactions_Jmats(Nx, interactions,
@@ -334,14 +334,16 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
             undo_marshall_sign_minus_signs = undo_marshall_sign(Nx)
             SiSj = sz_matrix + sxy_matrix * undo_marshall_sign_minus_signs
             var_SiSj = var_sz_matrix + var_sxy_matrix
-            Sk, err_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
+            Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
+            err_Sk = np.sqrt(var_Sk)/np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SiSj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SiSj', err_Sk)
             print(f"Sk (from <SiSj>) = {Sk}")
         else:
             SiSj = 3 * sz_matrix
             var_SiSj = 3 * var_sz_matrix
-            Sk, err_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
+            Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
+            err_Sk = np.sqrt(var_Sk)/np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Sk)
             print(f"Sk (from <SziSzj>) = {Sk}")
@@ -385,12 +387,12 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
         print(f"{number_of_replicas} devices, so batch size per device: {batch_size_per_device}")
         print(f"Mode = {correlation_mode}")
 
-    corr_final_directory = f'/final_corrs/ns_{num_samples_final_correlations_estimate}'
+    corr_final_directory = f'/final_correlations/ns_{num_samples_final_correlations_estimate}'
     if not os.path.exists(save_path + corr_final_directory) and task_id == 0:
         os.makedirs(save_path + corr_final_directory)
 
-    same_sublattice, diff_sublattice, all_interactions = buildlattice_alltoall(Nx)
-    _,_, triangular_interactions = buildlattice_triangular(Nx, Ny, bc=bc)
+    same_sublattice, diff_sublattice, all_interactions = buildlattice_alltoall(Nx,reorder=True)
+    _,_, triangular_interactions = buildlattice_triangular(Nx, Ny, bc=bc, reorder=True)
     interactions_batch_size = len(triangular_interactions)  # number of first order
     J_matrix_list_diff, interactions_batched_diff = get_batched_interactions_Jmats(Nx, diff_sublattice,
                                                                          interactions_batch_size, tf_dtype)
@@ -648,21 +650,21 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
             var_SziSzj = 3 * var_sz_matrix
             SxyiSxyj = (3 / 2) * sxy_matrix
             var_SxyiSxyj = (3 / 2) * var_sxy_matrix
-            Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
+            Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic, reorder=True)
             err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SiSj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SiSj', err_Sk)
             print(f"Sk (from <SiSj>) = {Sk}")
             print(var_Sk)
             print(err_Sk)
-            Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic)
+            Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic, reorder=True)
             err_Skz = np.sqrt(var_Skz) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
             print(f"Sk (from <SziSzj>) = {Skz}")
             print(var_Skz)
             print(err_Skz)
-            Skxy, var_Skxy = calculate_structure_factor(Nx, SxyiSxyj, var_Sij=var_SxyiSxyj, periodic=periodic)
+            Skxy, var_Skxy = calculate_structure_factor(Nx, SxyiSxyj, var_Sij=var_SxyiSxyj, periodic=periodic, reorder=True)
             err_Skxy = np.sqrt(var_Skxy) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SxyiSxyj', Skxy)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SxyiSxyj', err_Skxy)
