@@ -303,11 +303,11 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
                 batch_means_sxy[batch_s, :] = np.mean(sxyisxyj.numpy(), axis=0)
                 batch_vars_sxy[batch_s, :] = np.var(sxyisxyj.numpy(), axis=0)
 
-        sxy_allsamples = np.mean(batch_means_sxy, axis=0)
         sz_allsamples = np.mean(batch_means_sz, axis=0)
-        if correlation_mode == 'Sxyz':
-            var_sxy_allsamples = np.mean(batch_vars_sxy, axis=0) + np.var(batch_means_sxy, axis=0)
         var_sz_allsamples = np.mean(batch_vars_sz, axis=0) + np.var(batch_means_sz, axis=0)
+        if correlation_mode == 'Sxyz':
+            sxy_allsamples = np.mean(batch_means_sxy, axis=0)
+            var_sxy_allsamples = np.mean(batch_vars_sxy, axis=0) + np.var(batch_means_sxy, axis=0)
 
         spin_is = interactions_batch[:, 0]
         spin_js = interactions_batch[:, 1]
@@ -329,21 +329,37 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
                         var_sxy_matrix)
         print(f"Time per interaction batch: {time.time() - timestart}")
 
+
     if not np.isnan(sz_matrix[-1, -1]):  # done calculating matrix
         if correlation_mode == 'Sxyz':
             undo_marshall_sign_minus_signs = undo_marshall_sign(Nx)
             SiSj = sz_matrix + sxy_matrix * undo_marshall_sign_minus_signs
             var_SiSj = var_sz_matrix + var_sxy_matrix
-            Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
-            err_Sk = np.sqrt(var_Sk)/np.sqrt(num_samples_final_correlations_estimate)
+            SziSzj = 3 * sz_matrix
+            var_SziSzj = 3 * var_sz_matrix
+            SxyiSxyj = (3 / 2) * sxy_matrix * undo_marshall_sign_minus_signs
+            var_SxyiSxyj = (3 / 2) * var_sxy_matrix
+            Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic, reorder=True)
+            err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SiSj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SiSj', err_Sk)
             print(f"Sk (from <SiSj>) = {Sk}")
+            Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic, reorder=True)
+            err_Skz = np.sqrt(var_Skz) / np.sqrt(num_samples_final_correlations_estimate)
+            np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
+            np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
+            print(f"Sk (from <SziSzj>) = {Skz}")
+            Skxy, var_Skxy = calculate_structure_factor(Nx, SxyiSxyj, var_Sij=var_SxyiSxyj, periodic=periodic, reorder=True)
+            err_Skxy = np.sqrt(var_Skxy) / np.sqrt(num_samples_final_correlations_estimate)
+            np.save(save_path + corr_final_directory + f'/Sk_from_SxyiSxyj', Skxy)
+            np.save(save_path + corr_final_directory + f'/err_Sk_from_SxyiSxyj', err_Skxy)
+            print(f"Sk (from <SxyiSxyj>) = {Skxy}")
+
         else:
             SiSj = 3 * sz_matrix
             var_SiSj = 3 * var_sz_matrix
             Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
-            err_Sk = np.sqrt(var_Sk)/np.sqrt(num_samples_final_correlations_estimate)
+            err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Sk)
             print(f"Sk (from <SziSzj>) = {Sk}")
@@ -655,15 +671,11 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
             np.save(save_path + corr_final_directory + f'/Sk_from_SiSj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SiSj', err_Sk)
             print(f"Sk (from <SiSj>) = {Sk}")
-            print(var_Sk)
-            print(err_Sk)
             Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic, reorder=True)
             err_Skz = np.sqrt(var_Skz) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
             print(f"Sk (from <SziSzj>) = {Skz}")
-            print(var_Skz)
-            print(err_Skz)
             Skxy, var_Skxy = calculate_structure_factor(Nx, SxyiSxyj, var_Sij=var_SxyiSxyj, periodic=periodic, reorder=True)
             err_Skxy = np.sqrt(var_Skxy) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SxyiSxyj', Skxy)
