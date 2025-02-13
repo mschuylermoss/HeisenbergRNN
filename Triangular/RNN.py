@@ -127,7 +127,7 @@ class MDPeriodic(tf.keras.layers.SimpleRNNCell):
 
 class RNNWavefunction(ABC):
     def __init__(self, local_hilbert_space: int, num_sites: int, boundary_condition='open',
-                 tf_dtype=tf.float32):
+                 tf_dtype=tf.float32, phase_averaging=False):
         """
         Abstract RNNWavefunction class that contains reusable functions across all RNNs
 
@@ -142,6 +142,7 @@ class RNNWavefunction(ABC):
         self.local_hilbert_space = local_hilbert_space
         self.N_spins = num_sites
         self.tf_dtype = tf_dtype
+        self.phase_averaging = phase_averaging
         if self.local_hilbert_space > 2:
             raise NotImplementedError
         assert boundary_condition in ["open",
@@ -239,8 +240,17 @@ class RNNWavefunction(ABC):
         log_probs = tf.reshape(log_probs, (num_symmetries, num_samples))
         log_num_symmetries = tf.math.log(tf.cast(num_symmetries, dtype=log_probs.dtype))
         log_probs = tf.math.reduce_logsumexp(log_probs - log_num_symmetries, axis=0)
+        if self.phase_averaging:
+            with tf.name_scope('phase_averaging'):
+                self.exp_phases = tf.reshape(total_phases, (num_symmetries, num_samples) )
+                exp_phases = tf.reshape(tf.complex(tf.cos(total_phases), tf.sin(total_phases)), (num_symmetries, num_samples))
+                real_avg = self.regularized_identity(tf.math.real(tf.reduce_sum(exp_phases, axis=0)))
+                imag_avg = tf.math.imag(tf.reduce_sum(exp_phases, axis=0))
+                total_phases = tf.math.imag(tf.math.log(tf.complex(real_avg, imag_avg)))
+            return log_probs, tf.complex(0.5 * log_probs, total_phases)
 
-        return log_probs, tf.complex(0.5 * log_probs, tf.reshape(total_phases, (num_symmetries, num_samples))[0])
+        else:
+            return log_probs, tf.complex(0.5 * log_probs, tf.reshape(total_phases, (num_symmetries, num_samples))[0])
 
     def softsign(self, inputs):
         """
@@ -273,7 +283,8 @@ class cMDRNNWavefunction(RNNWavefunction):
                  h_symmetries=True,
                  seed=111,
                  kernel_initializer='glorot_uniform',
-                 tf_dtype=tf.float32):
+                 tf_dtype=tf.float32,
+                 phase_averaging=False):
 
         """
         systemsize_x, systemsize_y:  int
@@ -300,7 +311,7 @@ class cMDRNNWavefunction(RNNWavefunction):
         self.Nx = systemsize_x
         self.Ny = systemsize_y
 
-        super().__init__(local_hilbert_space, self.Nx * self.Ny, 'open', tf_dtype)
+        super().__init__(local_hilbert_space, self.Nx * self.Ny, 'open', tf_dtype, phase_averaging)
 
         self.weight_sharing = weight_sharing
         assert self.weight_sharing in ['all', 'sublattice'], \
@@ -591,7 +602,8 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
                  h_symmetries=True,
                  seed=111,
                  kernel_initializer='glorot_uniform',
-                 tf_dtype=tf.float32):
+                 tf_dtype=tf.float32,
+                 phase_averaging=False):
 
         """
         systemsize_x, systemsize_y:  integers
@@ -622,7 +634,7 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
         self.Nx = systemsize_x
         self.Ny = systemsize_y
 
-        super().__init__(local_hilbert_space, self.Nx * self.Ny, 'periodic', tf_dtype)
+        super().__init__(local_hilbert_space, self.Nx * self.Ny, 'periodic', tf_dtype, phase_averaging)
 
         self.weight_sharing = weight_sharing
         assert self.weight_sharing in ['all', 'sublattice'], \
