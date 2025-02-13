@@ -685,7 +685,7 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
         else:
             SiSj = 3 * sz_matrix
             var_SiSj = 3 * var_sz_matrix
-            Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
+            Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic,reorder=True)
             err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
             np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Sk)
