@@ -11,11 +11,12 @@ import numpy as np
 from train import train_
 from utils import get_train_method, data_saver
 
-from interactions import buildlattice_triangular, buildlattice_alltoall
+from interactions import buildlattice_triangular, buildlattice_alltoall, get_all_longest_r_interactions_triangular
 from interactions import get_batched_interactions_Jmats
 from correlations import get_Heisenberg_realspace_Correlation_Vectorized
 from correlations import get_Heisenberg_realspace_Correlation_Vectorized_TriMS
 from correlations import undo_marshall_sign, calculate_structure_factor
+from correlations import calculate_longrC
 
 
 def save_dict(di_, filename_):
@@ -150,6 +151,9 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
     correlation_mode = config['correlation_mode']
     assert correlation_mode in ['Sxyz',
                                 'Sz'], f"`correlation` mode must be `Sxyz` or `Sz`, received {correlation_mode}"
+    only_longest_r = config.get('only_longest_r',False)
+    if only_longest_r:
+        assert periodic, f"only_Longest_r method can only be used for periodic boundary conditions!"
 
     if PRINT:
         print(f"\nCalculating final correlations with {num_samples_final_correlations_estimate} samples")
@@ -164,6 +168,8 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
     _,_,interactions = buildlattice_alltoall(Nx)
     _, _, triangular_interactions = buildlattice_triangular(Nx, Ny, bc=bc)
     interactions_batch_size = len(triangular_interactions)  # number of first order
+    if only_longest_r:
+        interactions = get_all_longest_r_interactions_triangular(Nx)
     J_matrix_list, interactions_batched = get_batched_interactions_Jmats(Nx, interactions,
                                                                          interactions_batch_size, tf_dtype)
     num_interaction_batches = len(J_matrix_list.keys())
@@ -339,22 +345,54 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
             var_SziSzj = 3 * var_sz_matrix
             SxyiSxyj = (3 / 2) * sxy_matrix * undo_marshall_sign_minus_signs
             var_SxyiSxyj = (3 / 2) * var_sxy_matrix
-            Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
-            err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
-            np.save(save_path + corr_final_directory + f'/Sk_from_SiSj', Sk)
-            np.save(save_path + corr_final_directory + f'/err_Sk_from_SiSj', err_Sk)
-            print(f"Sk (from <SiSj>) = {Sk}")
-            Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic)
-            err_Skz = np.sqrt(var_Skz) / np.sqrt(num_samples_final_correlations_estimate)
-            np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
-            np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
-            print(f"Sk (from <SziSzj>) = {Skz}")
-            Skxy, var_Skxy = calculate_structure_factor(Nx, SxyiSxyj, var_Sij=var_SxyiSxyj, periodic=periodic)
-            err_Skxy = np.sqrt(var_Skxy) / np.sqrt(num_samples_final_correlations_estimate)
-            np.save(save_path + corr_final_directory + f'/Sk_from_SxyiSxyj', Skxy)
-            np.save(save_path + corr_final_directory + f'/err_Sk_from_SxyiSxyj', err_Skxy)
-            print(f"Sk (from <SxyiSxyj>) = {Skxy}")
-
+            if only_longest_r:
+                C_L_2,C_L_2_var = calculate_longrC(Nx,SiSj,var_SiSj)
+                C_L_2_err = np.sqrt(C_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/C_L_2', C_L_2)
+                np.save(save_path + corr_final_directory + f'/err_C_L_2', C_L_2_err)
+                print(f"C(L/2,L/2) = {C_L_2}")
+                Cz_L_2,Cz_L_2_var = calculate_longrC(Nx,SziSzj,var_SziSzj)
+                Cz_L_2_err = np.sqrt(Cz_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
+                np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
+                print(f"Cz(L/2,L/2) = {Cz_L_2}")
+                Cxy_L_2,Cxy_L_2_var = calculate_longrC(Nx,SxyiSxyj,var_SxyiSxyj)
+                Cxy_L_2_err = np.sqrt(Cxy_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Cxy_L_2', Cxy_L_2)
+                np.save(save_path + corr_final_directory + f'/err_Cxy_L_2', Cxy_L_2_err)
+                print(f"Cxy(L/2,L/2) = {Cxy_L_2}")
+            else:
+                Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic)
+                err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Sk_from_SiSj', Sk)
+                np.save(save_path + corr_final_directory + f'/err_Sk_from_SiSj', err_Sk)
+                print(f"Sk (from <SiSj>) = {Sk}")
+                Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic)
+                err_Skz = np.sqrt(var_Skz) / np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
+                np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
+                print(f"Sk (from <SziSzj>) = {Skz}")
+                Skxy, var_Skxy = calculate_structure_factor(Nx, SxyiSxyj, var_Sij=var_SxyiSxyj, periodic=periodic)
+                err_Skxy = np.sqrt(var_Skxy) / np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Sk_from_SxyiSxyj', Skxy)
+                np.save(save_path + corr_final_directory + f'/err_Sk_from_SxyiSxyj', err_Skxy)
+                print(f"Sk (from <SxyiSxyj>) = {Skxy}")
+                if periodic:
+                    C_L_2,C_L_2_var = calculate_longrC(Nx,SiSj,var_SiSj)
+                    C_L_2_err = np.sqrt(C_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                    np.save(save_path + corr_final_directory + f'/C_L_2', C_L_2)
+                    np.save(save_path + corr_final_directory + f'/err_C_L_2', C_L_2_err)
+                    print(f"C(L/2,L/2) = {C_L_2}")
+                    Cz_L_2,Cz_L_2_var = calculate_longrC(Nx,SziSzj,var_SziSzj)
+                    Cz_L_2_err = np.sqrt(Cz_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                    np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
+                    np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
+                    print(f"Cz(L/2,L/2) = {Cz_L_2}")
+                    Cxy_L_2,Cxy_L_2_var = calculate_longrC(Nx,SxyiSxyj,var_SxyiSxyj)
+                    Cxy_L_2_err = np.sqrt(Cxy_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                    np.save(save_path + corr_final_directory + f'/Cxy_L_2', Cxy_L_2)
+                    np.save(save_path + corr_final_directory + f'/err_Cxy_L_2', Cxy_L_2_err)
+                    print(f"Cxy(L/2,L/2) = {Cxy_L_2}")
         else:
             SiSj = 3 * sz_matrix
             var_SiSj = 3 * var_sz_matrix
@@ -363,6 +401,12 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
             np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Sk)
             print(f"Sk (from <SziSzj>) = {Sk}")
+            if periodic:
+                C_L_2,C_L_2_var = calculate_longrC(Nx,SiSj,var_SiSj)
+                C_L_2_err = np.sqrt(C_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Cz_L_2', C_L_2)
+                np.save(save_path + corr_final_directory + f'/err_Cz_L_2', C_L_2_err)
+                print(f"Cz(L/2,L/2) = {C_L_2}")
 
     if PRINT:
         print(f"\n Done calculating correlation matrices... "
@@ -396,6 +440,9 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
     correlation_mode = config['correlation_mode']
     assert correlation_mode in ['Sxyz',
                                 'Sz'], f"`correlation` mode must be `Sxyz` or `Sz`, received {correlation_mode}"
+    only_longest_r = config.get('only_longest_r',False)
+    if only_longest_r:
+        assert periodic, f"only_Longest_r method can only be used for periodic boundary conditions!"
 
     if PRINT:
         print(f"\nCalculating final correlations with {num_samples_final_correlations_estimate} samples")
@@ -410,6 +457,9 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
     same_sublattice, diff_sublattice, all_interactions = buildlattice_alltoall(Nx,reorder=True)
     _,_, triangular_interactions = buildlattice_triangular(Nx, Ny, bc=bc, reorder=True)
     interactions_batch_size = len(triangular_interactions)  # number of first order
+    if only_longest_r: # all interactions are between spins on the same sublattice!
+        same_sublattice = get_all_longest_r_interactions_triangular(Nx)
+        diff_sublattice = []
     J_matrix_list_diff, interactions_batched_diff = get_batched_interactions_Jmats(Nx, diff_sublattice,
                                                                          interactions_batch_size, tf_dtype)
     J_matrix_list_same, interactions_batched_same = get_batched_interactions_Jmats(Nx, same_sublattice,
@@ -666,22 +716,54 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
             var_SziSzj = 3 * var_sz_matrix
             SxyiSxyj = (3 / 2) * sxy_matrix
             var_SxyiSxyj = (3 / 2) * var_sxy_matrix
-            Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic, reorder=True)
-            err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
-            np.save(save_path + corr_final_directory + f'/Sk_from_SiSj', Sk)
-            np.save(save_path + corr_final_directory + f'/err_Sk_from_SiSj', err_Sk)
-            print(f"Sk (from <SiSj>) = {Sk}")
-            Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic, reorder=True)
-            err_Skz = np.sqrt(var_Skz) / np.sqrt(num_samples_final_correlations_estimate)
-            np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
-            np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
-            print(f"Sk (from <SziSzj>) = {Skz}")
-            Skxy, var_Skxy = calculate_structure_factor(Nx, SxyiSxyj, var_Sij=var_SxyiSxyj, periodic=periodic, reorder=True)
-            err_Skxy = np.sqrt(var_Skxy) / np.sqrt(num_samples_final_correlations_estimate)
-            np.save(save_path + corr_final_directory + f'/Sk_from_SxyiSxyj', Skxy)
-            np.save(save_path + corr_final_directory + f'/err_Sk_from_SxyiSxyj', err_Skxy)
-            print(f"Sk (from <SxyiSxyj>) = {Skxy}")
-
+            if only_longest_r:
+                C_L_2,C_L_2_var = calculate_longrC(Nx,SiSj,var_SiSj)
+                C_L_2_err = np.sqrt(C_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/C_L_2', C_L_2)
+                np.save(save_path + corr_final_directory + f'/err_C_L_2', C_L_2_err)
+                print(f"C(L/2,L/2) = {C_L_2}")
+                Cz_L_2,Cz_L_2_var = calculate_longrC(Nx,SziSzj,var_SziSzj)
+                Cz_L_2_err = np.sqrt(Cz_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
+                np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
+                print(f"Cz(L/2,L/2) = {Cz_L_2}")
+                Cxy_L_2,Cxy_L_2_var = calculate_longrC(Nx,SxyiSxyj,var_SxyiSxyj)
+                Cxy_L_2_err = np.sqrt(Cxy_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Cxy_L_2', Cxy_L_2)
+                np.save(save_path + corr_final_directory + f'/err_Cxy_L_2', Cxy_L_2_err)
+                print(f"Cxy(L/2,L/2) = {Cxy_L_2}")
+            else:
+                Sk, var_Sk = calculate_structure_factor(Nx, SiSj, var_Sij=var_SiSj, periodic=periodic, reorder=True)
+                err_Sk = np.sqrt(var_Sk) / np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Sk_from_SiSj', Sk)
+                np.save(save_path + corr_final_directory + f'/err_Sk_from_SiSj', err_Sk)
+                print(f"Sk (from <SiSj>) = {Sk}")
+                Skz, var_Skz = calculate_structure_factor(Nx, SziSzj, var_Sij=var_SziSzj, periodic=periodic, reorder=True)
+                err_Skz = np.sqrt(var_Skz) / np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Skz)
+                np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Skz)
+                print(f"Sk (from <SziSzj>) = {Skz}")
+                Skxy, var_Skxy = calculate_structure_factor(Nx, SxyiSxyj, var_Sij=var_SxyiSxyj, periodic=periodic, reorder=True)
+                err_Skxy = np.sqrt(var_Skxy) / np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Sk_from_SxyiSxyj', Skxy)
+                np.save(save_path + corr_final_directory + f'/err_Sk_from_SxyiSxyj', err_Skxy)
+                print(f"Sk (from <SxyiSxyj>) = {Skxy}")
+                if periodic:
+                    C_L_2,C_L_2_var = calculate_longrC(Nx,SiSj,var_SiSj)
+                    C_L_2_err = np.sqrt(C_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                    np.save(save_path + corr_final_directory + f'/C_L_2', C_L_2)
+                    np.save(save_path + corr_final_directory + f'/err_C_L_2', C_L_2_err)
+                    print(f"C(L/2,L/2) = {C_L_2}")
+                    Cz_L_2,Cz_L_2_var = calculate_longrC(Nx,SziSzj,var_SziSzj)
+                    Cz_L_2_err = np.sqrt(Cz_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                    np.save(save_path + corr_final_directory + f'/Cz_L_2', Cz_L_2)
+                    np.save(save_path + corr_final_directory + f'/err_Cz_L_2', Cz_L_2_err)
+                    print(f"Cz(L/2,L/2) = {Cz_L_2}")
+                    Cxy_L_2,Cxy_L_2_var = calculate_longrC(Nx,SxyiSxyj,var_SxyiSxyj)
+                    Cxy_L_2_err = np.sqrt(Cxy_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                    np.save(save_path + corr_final_directory + f'/Cxy_L_2', Cxy_L_2)
+                    np.save(save_path + corr_final_directory + f'/err_Cxy_L_2', Cxy_L_2_err)
+                    print(f"Cxy(L/2,L/2) = {Cxy_L_2}")
         else:
             SiSj = 3 * sz_matrix
             var_SiSj = 3 * var_sz_matrix
@@ -690,6 +772,13 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
             np.save(save_path + corr_final_directory + f'/Sk_from_SziSzj', Sk)
             np.save(save_path + corr_final_directory + f'/err_Sk_from_SziSzj', err_Sk)
             print(f"Sk (from <SziSzj>) = {Sk}")
+            if periodic:
+                C_L_2,C_L_2_var = calculate_longrC(Nx,SiSj,var_SiSj)
+                C_L_2_err = np.sqrt(C_L_2_var)/np.sqrt(num_samples_final_correlations_estimate)
+                np.save(save_path + corr_final_directory + f'/Cz_L_2', C_L_2)
+                np.save(save_path + corr_final_directory + f'/err_Cz_L_2', C_L_2_err)
+                print(f"Cz(L/2,L/2) = {C_L_2}")
+
 
     if PRINT:
         print(f"\n Done calculating correlation matrices... "
