@@ -68,6 +68,10 @@ def train_(config: dict):
     Hamiltonian = config['Hamiltonian']
     boundary_condition = config.get('boundary_condition', 'open')
     which_MS = config['which_MS']
+    if which_MS=='Square':
+        reorder=False
+    else:
+        reorder=True
     Nx = config['Nx']
     Ny = config['Ny']
     N_sites = Nx * Ny
@@ -290,7 +294,7 @@ def train_(config: dict):
 
     # 5. Generate list of lattice interactions:
     # ----------------------------------------------------------------------------------------------
-    square, diags, full_interaction_list = buildlattice_triangular(Nx, Ny, bc=boundary_condition)
+    square, diags, full_interaction_list = buildlattice_triangular(Nx, Ny, bc=boundary_condition, reorder=reorder)
 
     # 6. Define the training step:
     # ----------------------------------------------------------------------------------------------
