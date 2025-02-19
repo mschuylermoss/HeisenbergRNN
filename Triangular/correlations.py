@@ -4,6 +4,7 @@ import tensorflow as tf
 from interactions import coord_to_site_bravais
 from interactions import buildlattice_alltoall, buildlattice_alltoall_primitive_vector
 from interactions import generate_sublattices_square
+from interactions import get_all_longest_r_interactions_triangular
 
 default_p1 = (1.,0.)
 default_p2 = (-1/2,np.sqrt(3)/2)
@@ -186,3 +187,23 @@ def undo_marshall_sign(L):
         no_minus = ((s1 in A_sites) ^ (s2 in B_sites)) or ((s1 in B_sites) ^ (s2 in A_sites))
         minus_signs_matrix[s1, s2] = 2 * no_minus - 1
     return minus_signs_matrix
+
+
+def calculate_longrC(L, Sij, var_Sij=None):
+
+    longr_interactions = get_all_longest_r_interactions_triangular(L)
+    to_sum = []
+    vars_to_sum = []
+    for interaction in longr_interactions:
+        Sij_int = Sij[interaction[0],interaction[1]]
+        to_sum.append(Sij_int)
+        if var_Sij is not None:
+            var_Sij_int = var_Sij[interaction[0],interaction[1]]
+            vars_to_sum.append(var_Sij_int)
+    to_sum_np = np.array(to_sum)
+    if var_Sij is not None:
+        vars_to_sum_np = np.array(vars_to_sum)
+        total_var = np.sum(vars_to_sum_np) / (len(vars_to_sum_np)**2)
+    else:
+        total_var = np.var(to_sum_np)
+    return np.mean(to_sum_np), total_var
