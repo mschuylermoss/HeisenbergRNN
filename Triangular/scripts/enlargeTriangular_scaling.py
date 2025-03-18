@@ -14,7 +14,7 @@ parser.add_argument('--world_size', default=1)
 parser.add_argument('--path', default=False, type=bool)
 
 parser.add_argument('--which_MS', default="Square", type=str)
-parser.add_argument('--weight_sharing', default="sublattice", type=str)
+parser.add_argument('--weight_sharing', default="all", type=str)
 parser.add_argument('--units', default=256, type=int)
 parser.add_argument('--experiment_name', default='TEST', type=str)
 parser.add_argument('--bc', default='open', type=str)
