@@ -104,7 +104,9 @@ if not path:
             devices = cpu_devices
         if number_of_available_gpus > 1:
             print(f"Distributed training with {number_of_available_gpus} devices")
-            strategy = tf.distribute.MirroredStrategy()
+            strategy = tf.distribute.MirroredStrategy(
+                cross_device_ops=tf.distribute.HierarchicalCopyAllReduce()
+            )
         else:
             print(f"Training with a single device (default)")
             strategy = tf.distribute.OneDeviceStrategy(devices[0].name)
@@ -298,9 +300,11 @@ if __name__ == '__main__':
             new_conf["Ny"] = _L
             new_conf["lr"] = LRSchedule_constant(1e-5)
             new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
-            if _L >= 20:
-                new_conf['CORRELATIONS_MATRIX'] = False
-                new_conf['only_longest_r'] = True
+            if new_conf['Nx'] > 20:
+                if new_conf['boundary_condition'] == 'periodic':
+                    new_conf['only_longest_r'] = True
+                else:
+                    new_conf['CORRELATIONS_MATRIX'] = False
             if _L > 12:
                 new_conf['chunk_size'] = 5
             configs.append(new_conf.copy())
