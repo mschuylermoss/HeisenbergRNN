@@ -53,33 +53,6 @@ def calculate_structure_factor(L: int,
     return np.real(Sk), np.real(Sk_var)
 
 
-def get_Si(log_fxn,tf_dtype=tf.float32):
-
-    def Sxyi_vectorized(samples,og_amps):
-        N = tf.shape(samples)[1]
-        samples_tiled_not_flipped = tf.repeat(samples[:, :, tf.newaxis], N, axis=2)
-        samples_tiled_flipped = tf.math.mod(samples_tiled_not_flipped + tf.eye(N,dtype=tf_dtype)[tf.newaxis, :, :], 2)
-        subtract = samples_tiled_not_flipped - samples_tiled_flipped
-        signs = tf.complex(tf.cast(0.0, dtype=tf_dtype), tf.reduce_sum(subtract, axis=1))
-        _, flip_logamp = log_fxn(tf.reshape(samples_tiled_flipped, (-1, N))) # (Ns*N,N)
-        amp_ratio = tf.math.exp(tf.reshape(flip_logamp, (-1, N)) - og_amps[:, tf.newaxis]) # (Ns, N)
-        Si_x = amp_ratio
-        Si_y = signs * amp_ratio
-        local_Sis = Si_x + Si_y
-
-        return local_Sis # (Ns,)
-
-    def Szi_vectorized(samples):
-
-        N = tf.shape(samples)[1]
-        Si_z_real = tf.eye(N,dtype=tf_dtype) @ (2 * tf.transpose(samples) - 1)
-        Si_z = tf.complex(Si_z_real,tf.cast(0,dtype=tf_dtype))
-        local_Sis = tf.transpose(Si_z)
-    
-        return local_Sis # (Ns,)
-
-    return Sxyi_vectorized,Szi_vectorized
-
 def get_Heisenberg_realspace_Correlation_Vectorized(log_fxn, tf_dtype=tf.float32):
     print("getting correlation function!")
 

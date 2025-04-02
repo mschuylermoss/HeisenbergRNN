@@ -68,10 +68,10 @@ def train_(config: dict):
     Hamiltonian = config['Hamiltonian']
     boundary_condition = config.get('boundary_condition', 'open')
     which_MS = config['which_MS']
-    if which_MS=='Square':
-        reorder=False
-    else:
+    if which_MS=='Triangular':
         reorder=True
+    else: # Square or None
+        reorder=False
     Nx = config['Nx']
     Ny = config['Ny']
     N_sites = Nx * Ny
@@ -524,7 +524,7 @@ if __name__ == "__main__":
         #### System
         'Hamiltonian': 'AFHeisenberg',
         'boundary_condition': 'periodic',
-        'which_MS': 'Square',
+        'which_MS': 'No',
         'Nx': 6,  # number of sites in x-direction
         'Ny': 6,  # number of sites in the y-direction
 
@@ -541,7 +541,7 @@ if __name__ == "__main__":
         #### Annealing
         'scale': 1.,
         'rate': 0.25,
-        'T0': 0,
+        'T0': 0.25,
         'T0_L_6': 0,
         'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if T0 = 0)
         'num_annealing_steps': 1000,  # number of annealing steps
