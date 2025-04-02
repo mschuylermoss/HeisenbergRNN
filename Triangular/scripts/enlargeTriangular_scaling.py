@@ -14,7 +14,7 @@ parser.add_argument('--world_size', default=1)
 parser.add_argument('--path', default=False, type=bool)
 
 parser.add_argument('--which_MS', default="Square", type=str)
-parser.add_argument('--weight_sharing', default="sublattice", type=str)
+parser.add_argument('--weight_sharing', default="all", type=str)
 parser.add_argument('--units', default=256, type=int)
 parser.add_argument('--experiment_name', default='TEST', type=str)
 parser.add_argument('--bc', default='open', type=str)
@@ -104,7 +104,9 @@ if not path:
             devices = cpu_devices
         if number_of_available_gpus > 1:
             print(f"Distributed training with {number_of_available_gpus} devices")
-            strategy = tf.distribute.MirroredStrategy()
+            strategy = tf.distribute.MirroredStrategy(
+                cross_device_ops=tf.distribute.HierarchicalCopyAllReduce()
+            )
         else:
             print(f"Training with a single device (default)")
             strategy = tf.distribute.OneDeviceStrategy(devices[0].name)
@@ -133,7 +135,7 @@ if __name__ == '__main__':
     bc = args.bc
     which_MS = args.which_MS
     use_complex = True
-    data_path_prepend = '/mnt/ceph/users/wiermoss/HeisenbergRNN'
+    data_path_prepend = './../data/'
     l_symmetries = (args.lsym == "1")
     schedule = args.schedule
 
@@ -300,10 +302,52 @@ if __name__ == '__main__':
             new_conf["lr"] = LRSchedule_constant(1e-5)
             new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
             if _L >= 20:
+                if new_conf['boundary_condition'] == 'periodic':
+                    new_conf['only_longest_r'] = True
+                else:
+                    new_conf['CORRELATIONS_MATRIX'] = False
+            if _L > 12:
+                new_conf['chunk_size'] = 5
+            configs.append(new_conf.copy())
+
+    if schedule == 'even':
+        configs = [config_step1.copy(), config_step2.copy(), config_step3.copy(), ]
+
+        L_list = [8, 10, 12, 14, 16, 18]
+        for _L in L_list:
+            new_conf = configs[-1].copy()
+            new_conf["previous_config"] = new_conf.copy()
+            new_conf["Nx"] = _L
+            new_conf["Ny"] = _L
+            new_conf["lr"] = LRSchedule_constant(1e-5)
+            new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
+            if _L >= 20:
                 new_conf['CORRELATIONS_MATRIX'] = False
             if _L > 12:
                 new_conf['chunk_size'] = 5
             configs.append(new_conf.copy())
+
+    if schedule == 'times':
+        configs = [config_step3.copy(), ]
+
+        L_list = [6, 12, 18, 24, 30, 36]
+        for _L in L_list:
+            new_conf = configs[-1].copy()
+            new_conf["previous_config"] = None
+            new_conf["Nx"] = _L
+            new_conf["Ny"] = _L
+            new_conf["lr"] = LRSchedule_constant(1e-5 )
+            new_conf['num_warmup_steps']        = 0
+            new_conf['num_annealing_steps']     = 0
+            new_conf['num_equilibrium_steps']   = 1
+            new_conf["num_training_steps"]      = 500
+            if _L > 12:
+                new_conf['chunk_size'] = 5
+            new_conf["ENERGY"] = False
+            new_conf["CORRELATIONS_MATRIX"] = False
+            configs.append(new_conf.copy())
+        
+        configs = configs[1:]
 
     if schedule == '6x6':
         configs = [config_step1.copy(), config_step2.copy(), config_step3.copy(), ]
