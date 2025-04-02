@@ -714,7 +714,12 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
                         var_sxy_matrix)
         print(f"Time per interaction batch: {time.time() - timestart}")
 
-    if not np.isnan(sz_matrix[-1, -1]):  # done calculating matrix
+    if only_longest_r:
+        done_calculating = not np.isnan(sz_matrix[same_sublattice[-1][0], same_sublattice[-1][1]])
+    else:
+        done_calculating = (not np.isnan(sz_matrix[same_sublattice[-1][0], same_sublattice[-1][1]])) & np.isnan(sz_matrix[diff_sublattice[-1][0], diff_sublattice[-1][1]])
+
+    if done_calculating:  # done calculating matrix
         if correlation_mode == 'Sxyz':
             SiSj = sz_matrix + sxy_matrix
             var_SiSj = var_sz_matrix + var_sxy_matrix

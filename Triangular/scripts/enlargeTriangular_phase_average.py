@@ -13,19 +13,20 @@ parser.add_argument('--task_id', default=0)
 parser.add_argument('--world_size', default=1)
 parser.add_argument('--path', default=False, type=bool)
 
-parser.add_argument('--which_MS', default="Square", type=str)
+parser.add_argument('--which_MS', default="Triangular", type=str)
 parser.add_argument('--weight_sharing', default="all", type=str)
 parser.add_argument('--units', default=256, type=int)
-parser.add_argument('--experiment_name', default='TEST', type=str)
-parser.add_argument('--bc', default='open', type=str)
+parser.add_argument('--experiment_name', default='Feb13PhaseAvgC2v', type=str)
+parser.add_argument('--bc', default='periodic', type=str)
 parser.add_argument('--num_anneal', default=10000, type=int)
 parser.add_argument('--scale', default=1.0, type=float)
-parser.add_argument('--rate', default=0.475, type=float)
-parser.add_argument('--T0', default=0.25, type=float)
+parser.add_argument('--rate', default=0.25, type=float)
+parser.add_argument('--T0', default=1., type=float)
 parser.add_argument('--seed', default=100, type=int)
 parser.add_argument('--use_complex', default="1", type=str)
+parser.add_argument('--force_c2v', default="0", type=str)
 parser.add_argument('--lsym', default="1", type=str)
-parser.add_argument('--schedule', default="rate", type=str)
+parser.add_argument('--schedule', default="6x6", type=str)
 args = parser.parse_args()
 
 path = bool(args.path)
@@ -104,9 +105,7 @@ if not path:
             devices = cpu_devices
         if number_of_available_gpus > 1:
             print(f"Distributed training with {number_of_available_gpus} devices")
-            strategy = tf.distribute.MirroredStrategy(
-                cross_device_ops=tf.distribute.HierarchicalCopyAllReduce()
-            )
+            strategy = tf.distribute.MirroredStrategy()
         else:
             print(f"Training with a single device (default)")
             strategy = tf.distribute.OneDeviceStrategy(devices[0].name)
@@ -116,18 +115,21 @@ else:
 
     strategy = None
 
-from train import train_
+from train_phase_averaging_hook import train_
 from estimate import estimate_
 
-from utils import LRSchedule_decay, LRSchedule_constant, step_schedule_exp_decay
+from utils import LRSchedule_decay, LRSchedule_constant
 
 if __name__ == '__main__':
 
     experiment_name = args.experiment_name
+    print(experiment_name,"__"*30)
     num_samples = 100
     number_of_annealing_step = int(args.num_anneal)
     scale = args.scale
     rate = args.rate
+    force_c2v = (args.force_c2v == "1")
+    print("FORCE C2V ---------->", force_c2v)
     lr_decay_rate = 5000
     units = int(args.units)
     weight_sharing = args.weight_sharing
@@ -135,7 +137,8 @@ if __name__ == '__main__':
     bc = args.bc
     which_MS = args.which_MS
     use_complex = True
-    data_path_prepend = './../data/'
+    data_path_prepend = '/mnt/ceph/users/wiermoss/HeisenbergRNN'
+    # data_path_prepend = '../..'
     l_symmetries = (args.lsym == "1")
     schedule = args.schedule
 
@@ -254,11 +257,13 @@ if __name__ == '__main__':
         'num_warmup_steps': 1000,  # number of warmup steps 1000 = default (also shouldn't be relevant if T0 = 0)
         'num_annealing_steps': int(scale * number_of_annealing_step),  # number of annealing steps
         'num_equilibrium_steps': 5,  # number of gradient steps at each temperature value
-        'num_training_steps': int(scale * 50000),  # number of training steps
+        'num_training_steps': int(scale * 25500),  # number of training steps
 
         #### Symmetries
         'h_symmetries': True,
         'l_symmetries': l_symmetries,
+        'phase_averaging': True,
+        'force_c2v': force_c2v,
         'spin_parity': False,
 
         #### Other
@@ -270,102 +275,12 @@ if __name__ == '__main__':
         'data_path_prepend': data_path_prepend,
 
         #### Final Estimates
-        'ENERGY': True,
+        'ENERGY': False,
         'num_samples_final_energy_estimate': 10000,
-        'CORRELATIONS_MATRIX': True,
+        'CORRELATIONS_MATRIX': False,
         'correlation_mode': 'Sxyz',
         'num_samples_final_correlations_estimate': 10000,
     }
-
-    if schedule == 'even':
-        configs = [config_step1.copy(), config_step2.copy(), config_step3.copy(), ]
-        L_list = [8, 10, 12, ]
-        for  _L in L_list:
-            new_conf = configs[-1].copy()
-            new_conf["previous_config"] = new_conf.copy()
-            new_conf["Nx"] = _L
-            new_conf["Ny"] = _L
-            new_conf["lr"] = LRSchedule_constant(1e-5)
-            new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
-            configs.append(new_conf.copy())
-
-    if schedule == 'rate':
-        configs = [config_step1.copy(), config_step2.copy(), config_step3.copy(), ]
-
-        L_list = [12, 18, 24, 30, ]
-        for _L in L_list:
-            new_conf = configs[-1].copy()
-            new_conf["previous_config"] = new_conf.copy()
-            new_conf["Nx"] = _L
-            new_conf["Ny"] = _L
-            new_conf["lr"] = LRSchedule_constant(1e-5)
-            new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
-            if new_conf['Nx'] > 20:
-                if new_conf['boundary_condition'] == 'periodic':
-                    new_conf['only_longest_r'] = True
-                else:
-                    new_conf['CORRELATIONS_MATRIX'] = False
-            if _L > 12:
-                new_conf['chunk_size'] = 5
-            configs.append(new_conf.copy())
-
-    if schedule == 'rate24':
-        configs = [config_step1.copy(), config_step2.copy(), config_step3.copy(), ]
-        L_list = [12, 18, 24,]
-        for _L in L_list:
-            new_conf = configs[-1].copy()
-            new_conf["previous_config"] = new_conf.copy()
-            new_conf["Nx"] = _L
-            new_conf["Ny"] = _L
-            new_conf["lr"] = LRSchedule_constant(1e-5)
-            new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
-            if _L >= 20:
-                if new_conf['boundary_condition'] == 'periodic':
-                    new_conf['only_longest_r'] = True
-                else:
-                    new_conf['CORRELATIONS_MATRIX'] = False
-            if _L > 12:
-                new_conf['chunk_size'] = 5
-            configs.append(new_conf.copy())
-
-    if schedule == 'even':
-        configs = [config_step1.copy(), config_step2.copy(), config_step3.copy(), ]
-
-        L_list = [8, 10, 12, 14, 16, 18]
-        for _L in L_list:
-            new_conf = configs[-1].copy()
-            new_conf["previous_config"] = new_conf.copy()
-            new_conf["Nx"] = _L
-            new_conf["Ny"] = _L
-            new_conf["lr"] = LRSchedule_constant(1e-5)
-            new_conf["num_training_steps"] += step_schedule_exp_decay(_L, scale=scale, rate=rate)
-            if _L >= 20:
-                new_conf['CORRELATIONS_MATRIX'] = False
-            if _L > 12:
-                new_conf['chunk_size'] = 5
-            configs.append(new_conf.copy())
-
-    if schedule == 'times':
-        configs = [config_step3.copy(), ]
-
-        L_list = [6, 12, 18, 24, 30, 36]
-        for _L in L_list:
-            new_conf = configs[-1].copy()
-            new_conf["previous_config"] = None
-            new_conf["Nx"] = _L
-            new_conf["Ny"] = _L
-            new_conf["lr"] = LRSchedule_constant(1e-5 )
-            new_conf['num_warmup_steps']        = 0
-            new_conf['num_annealing_steps']     = 0
-            new_conf['num_equilibrium_steps']   = 1
-            new_conf["num_training_steps"]      = 500
-            if _L > 12:
-                new_conf['chunk_size'] = 5
-            new_conf["ENERGY"] = False
-            new_conf["CORRELATIONS_MATRIX"] = False
-            configs.append(new_conf.copy())
-        
-        configs = configs[1:]
 
     if schedule == '6x6':
         configs = [config_step1.copy(), config_step2.copy(), config_step3.copy(), ]
@@ -393,8 +308,6 @@ if __name__ == '__main__':
             conf['scale'] = scale
             conf['rate'] = rate
             train_(conf)
-            tf.keras.backend.clear_session()
-            estimate_(conf)
             tf.keras.backend.clear_session()
 
         print("Python: main(config) is done")

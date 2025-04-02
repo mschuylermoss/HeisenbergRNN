@@ -124,7 +124,7 @@ def train_(config: dict):
         return save_path
     else:
         save_path = data_saver(config, train_method, N_spins, data_path_prepend=data_path_prepend, task_id=task_id)
-
+    print(f"Save path: {save_path}")
     sync = int(sum(sync_function(strategy)().numpy().tolist()))
     print(f"Sync {sync} devices")
 
