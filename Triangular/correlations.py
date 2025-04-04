@@ -12,31 +12,17 @@ default_p2 = (-1/2,np.sqrt(3)/2)
 default_kx = 2*np.pi/3
 default_ky = 2*np.pi/np.sqrt(3)
 
-
-def calculate_all_kspace_correlations(L: int, 
-                                  Sij: np.ndarray, 
-                                  kx_mesh: np.ndarray, ky_mesh: np.ndarray, 
-                                  p1=default_p1, p2=default_p2,
-                                  snake=False,
-                                  periodic=False):
-    Sk = np.zeros((len(kx_mesh), len(ky_mesh)), dtype=complex)
-    interactions_r = buildlattice_alltoall_primitive_vector(L, p1, p2, snake, periodic)
-
-    for idx, r in interactions_r.items():
-        Sk += np.exp(1j * (r[0] * kx_mesh[:, np.newaxis] + r[1] * ky_mesh[np.newaxis, :])) * Sij[idx]
-        if idx[0] != idx[1]:
-            Sk += np.exp(-1j * (r[0] * kx_mesh[:, np.newaxis] + r[1] * ky_mesh[np.newaxis, :])) * Sij[idx]
-    Sk /= L ** 2
-    return np.real(Sk)
-
 def calculate_structure_factor(L: int, 
                                Sij: np.ndarray, 
                                kx=default_kx, ky=default_ky, 
                                p1=default_p1, p2=default_p2, 
                                var_Sij=None, 
                                periodic=False,
-                               reorder=False):
-    interactions_r = buildlattice_alltoall_primitive_vector(L, p1, p2, periodic, reorder=reorder)
+                               reorder=False,
+                               boundary_size=0):
+    
+    L_bulk = L-(2*boundary_size)
+    interactions_r = buildlattice_alltoall_primitive_vector(L, p1, p2, periodic, reorder=reorder,boundary_size=boundary_size)
 
     Sk = 0
     Sk_var = 0
@@ -48,8 +34,8 @@ def calculate_structure_factor(L: int,
             Sk_var += np.exp(1j * (r[0] * kx + r[1] * ky))*np.conj(np.exp(1j * (r[0] * kx + r[1] * ky))) * var_Sij[idx]
             if idx[0] != idx[1]:
                 Sk_var += np.exp(1j * (r[0] * kx + r[1] * ky))*np.conj(np.exp(1j * (r[0] * kx + r[1] * ky))) * var_Sij[idx]
-    Sk /= L ** 2
-    Sk_var /= L ** 4
+    Sk /= L_bulk ** 2
+    Sk_var /= L_bulk ** 4
     return np.real(Sk), np.real(Sk_var)
 
 
