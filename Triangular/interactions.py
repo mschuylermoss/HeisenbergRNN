@@ -222,8 +222,12 @@ def buildlattice_alltoall(L, reorder=False):
 def get_norm(vec):
     return vec[0]**2 + vec[1]**2
 
-def buildlattice_alltoall_primitive_vector(L: int, p1=default_p1, p2=default_p2, periodic=False, reorder=False):
+
+def buildlattice_alltoall_primitive_vector(L: int, 
+                                           p1=default_p1, p2=default_p2, 
+                                           periodic=False, reorder=False, boundary_size=0):
     interactions = {}
+    L_bulk=L-boundary_size
     N_spins = L ** 2
     _, _, _, sublattices = generate_sublattices_triangular(L, L)
 
@@ -231,37 +235,40 @@ def buildlattice_alltoall_primitive_vector(L: int, p1=default_p1, p2=default_p2,
         for j in range(i, N_spins):
             xi_square = i % L
             yi_square = i // L
+            i_in_bulk = (xi_square>=boundary_size) & (xi_square<L_bulk) & (yi_square>=boundary_size) & (yi_square<L_bulk)
 
             xj_square = j % L
             yj_square = j // L
+            j_in_bulk = (xj_square>=boundary_size) & (xj_square<L_bulk) & (yj_square>=boundary_size) & (yj_square<L_bulk)
 
-            site_i = coord_to_site_bravais(L, xi_square, yi_square)
-            site_j = coord_to_site_bravais(L, xj_square, yj_square)
-            int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
-            interaction = (int_i,int_j)
+            if i_in_bulk and j_in_bulk:
+                site_i = coord_to_site_bravais(L, xi_square, yi_square)
+                site_j = coord_to_site_bravais(L, xj_square, yj_square)
+                int_i, int_j = reorder_interaction(site_i, site_j, sublattices,reorder=reorder)
+                interaction = (int_i,int_j)
 
-            delta_x_square = xj_square - xi_square
-            delta_y_square = yj_square - yi_square
+                delta_x_square = xj_square - xi_square
+                delta_y_square = yj_square - yi_square
 
-            if periodic:
-                delta_y_square_peri = -1 * (L - delta_y_square)
-                delta_x_square_peri = -1 * (L - delta_x_square)
-                r_no_peri = (delta_x_square * p1[0] + delta_y_square * p2[0],
-                             delta_y_square * p2[1])
-                r_x_peri = (delta_x_square_peri * p1[0] + delta_y_square * p2[0],
-                             delta_y_square * p2[1])
-                r_y_peri = (delta_x_square * p1[0] + delta_y_square_peri * p2[0],
-                             delta_y_square_peri * p2[1])
-                r_both_peri = (delta_x_square_peri * p1[0] + delta_y_square_peri * p2[0],
-                             delta_y_square_peri * p2[1])
-                r_vecs = np.array([r_no_peri,r_x_peri,r_y_peri,r_both_peri])
-                r_norms = np.array([get_norm(r_no_peri),get_norm(r_x_peri),get_norm(r_y_peri),get_norm(r_both_peri)])
-                idx = np.where(r_norms==min(r_norms))
-                interactions[interaction] = r_vecs[idx][0]
-            else:
-                delta_x = delta_x_square * p1[0] + delta_y_square * p2[0]
-                delta_y = delta_x_square * p1[1] + delta_y_square * p2[1]
-                interactions[interaction] = (delta_x, delta_y)
+                if periodic:
+                    delta_y_square_peri = -1 * (L - delta_y_square)
+                    delta_x_square_peri = -1 * (L - delta_x_square)
+                    r_no_peri = (delta_x_square * p1[0] + delta_y_square * p2[0],
+                                delta_y_square * p2[1])
+                    r_x_peri = (delta_x_square_peri * p1[0] + delta_y_square * p2[0],
+                                delta_y_square * p2[1])
+                    r_y_peri = (delta_x_square * p1[0] + delta_y_square_peri * p2[0],
+                                delta_y_square_peri * p2[1])
+                    r_both_peri = (delta_x_square_peri * p1[0] + delta_y_square_peri * p2[0],
+                                delta_y_square_peri * p2[1])
+                    r_vecs = np.array([r_no_peri,r_x_peri,r_y_peri,r_both_peri])
+                    r_norms = np.array([get_norm(r_no_peri),get_norm(r_x_peri),get_norm(r_y_peri),get_norm(r_both_peri)])
+                    idx = np.where(r_norms==min(r_norms))
+                    interactions[interaction] = r_vecs[idx][0]
+                else:
+                    delta_x = delta_x_square * p1[0] + delta_y_square * p2[0]
+                    delta_y = delta_x_square * p1[1] + delta_y_square * p2[1]
+                    interactions[interaction] = (delta_x, delta_y)
 
     return interactions
 
