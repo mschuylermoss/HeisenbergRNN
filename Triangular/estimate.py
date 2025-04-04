@@ -124,7 +124,7 @@ def estimate_energy(config, save_path, energy_fxn, sample_fxn, log_fxn, strategy
             print(f"varE = {final_energies_var}")
 
 
-def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, strategy):
+def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, strategy, apply_MS=False):
     PRINT = config['PRINT']
     task_id = config.get('task_id', 0)
 
@@ -339,11 +339,17 @@ def estimate_correlations_distributed(config, save_path, sample_fxn, log_fxn, st
     if not np.isnan(sz_matrix[-1, -1]):  # done calculating matrix
         if correlation_mode == 'Sxyz':
             undo_marshall_sign_minus_signs = undo_marshall_sign(Nx)
-            SiSj = sz_matrix + sxy_matrix * undo_marshall_sign_minus_signs
+            if apply_MS:
+                SiSj = sz_matrix + sxy_matrix * undo_marshall_sign_minus_signs
+            else:
+                SiSj = sz_matrix + sxy_matrix 
             var_SiSj = var_sz_matrix + var_sxy_matrix
             SziSzj = 3 * sz_matrix
             var_SziSzj = 3 * var_sz_matrix
-            SxyiSxyj = (3 / 2) * sxy_matrix * undo_marshall_sign_minus_signs
+            if apply_MS:
+                SxyiSxyj = (3 / 2) * sxy_matrix * undo_marshall_sign_minus_signs
+            else:
+                SxyiSxyj = (3 / 2) * sxy_matrix
             var_SxyiSxyj = (3 / 2) * var_sxy_matrix
             if only_longest_r:
                 C_L_2,C_L_2_var = calculate_longrC(Nx,SiSj,var_SiSj)
@@ -708,7 +714,12 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
                         var_sxy_matrix)
         print(f"Time per interaction batch: {time.time() - timestart}")
 
-    if not np.isnan(sz_matrix[-1, -1]):  # done calculating matrix
+    if only_longest_r:
+        done_calculating = not np.isnan(sz_matrix[same_sublattice[-1][0], same_sublattice[-1][1]])
+    else:
+        done_calculating = (not np.isnan(sz_matrix[same_sublattice[-1][0], same_sublattice[-1][1]])) & np.isnan(sz_matrix[diff_sublattice[-1][0], diff_sublattice[-1][1]])
+
+    if done_calculating:  # done calculating matrix
         if correlation_mode == 'Sxyz':
             SiSj = sz_matrix + sxy_matrix
             var_SiSj = var_sz_matrix + var_sxy_matrix
@@ -796,7 +807,7 @@ def estimate_(config: dict):
     # Get quantities to estimate
     ENERGY = config.get('ENERGY', False)
     CORRELATIONS_MATRIX = config.get('CORRELATIONS_MATRIX', False)
-    Sk_from_Si = config.get('Sk_from_Si', False)
+    TOTAL_SPIN = config.get('TOTAL_SPIN', False)
 
     # Get save path
     data_path_prepend = config.get('data_path_prepend', './data/')
@@ -828,7 +839,14 @@ def estimate_(config: dict):
             estimate_correlations_distributed(config, save_path, RNNWF.sample,
                                               lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries,
                                                                             parity=spin_parity),
-                                              strategy)
+                                              strategy,
+                                              apply_MS = True)
+        elif config['which_MS'] == 'No':
+            estimate_correlations_distributed(config, save_path, RNNWF.sample,
+                                              lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries,
+                                                                            parity=spin_parity),
+                                              strategy,
+                                              apply_MS = False)
         elif config['which_MS'] == 'Triangular':
             estimate_correlations_distributed_TriMS(config, save_path, RNNWF.sample,
                                                     lambda x: RNNWF.log_probsamps(x, symmetrize=l_symmetries,
@@ -839,7 +857,7 @@ def estimate_(config: dict):
 
 
 if __name__ == "__main__":
-    devices = tf.config.list_logical_devices("CPU")
+    devices = tf.config.list_logical_devices("GPU")
     print(devices)
     from utils import LRSchedule_decay, LRSchedule_constant
 
@@ -886,7 +904,8 @@ if __name__ == "__main__":
         'PRINT': True,  # whether to print progress throughout training
         'TRAIN': True,  # whether to train the model
 
-        'strategy': tf.distribute.OneDeviceStrategy(devices[0].name),
+        'strategy': tf.distribute.MirroredStrategy(),
+        # 'strategy': tf.distribute.OneDeviceStrategy(devices[0].name),
 
         'ENERGY': False,
         'num_samples_final_energy_estimate': 1000,
