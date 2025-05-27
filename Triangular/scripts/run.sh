@@ -2,11 +2,11 @@
 #SBATCH -p h200q
 #SBATCH --job-name=heisenberg
 #SBATCH --nodes=1                                                
-#SBATCH --gpus=5
+#SBATCH --gpus=4
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-task=5
+#SBATCH --gpus-per-task=4
 #SBATCH --mem-per-cpu=32G                                           
-#SBATCH --time=0-12:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --output=./outputs/heisenberg.%j.%N.out
 
 source ../../venv/bin/activate
