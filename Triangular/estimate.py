@@ -472,6 +472,9 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
                                                                          interactions_batch_size, tf_dtype)
     num_interaction_batches_diff = len(J_matrix_list_diff.keys())
     num_interaction_batches_same = len(J_matrix_list_same.keys())
+    print("HEADS UP!")
+    print(f"There are {len(interactions_batched_diff)} diff sublattice batches")
+    print(f"and {len(interactions_batched_same)} same sublattice batches")
     path_exists_Sxy = os.path.exists(save_path + corr_final_directory + f'/Sxy_matrix.npy')
     path_exists_Sz = os.path.exists(save_path + corr_final_directory + f'/Sz_matrix.npy')
 
@@ -717,7 +720,7 @@ def estimate_correlations_distributed_TriMS(config, save_path, sample_fxn, log_f
     if only_longest_r:
         done_calculating = not np.isnan(sz_matrix[same_sublattice[-1][0], same_sublattice[-1][1]])
     else:
-        done_calculating = (not np.isnan(sz_matrix[same_sublattice[-1][0], same_sublattice[-1][1]])) & np.isnan(sz_matrix[diff_sublattice[-1][0], diff_sublattice[-1][1]])
+        done_calculating = (not np.isnan(sz_matrix[same_sublattice[-1][0], same_sublattice[-1][1]])) & (not np.isnan(sz_matrix[diff_sublattice[-1][0], diff_sublattice[-1][1]]))
 
     if done_calculating:  # done calculating matrix
         if correlation_mode == 'Sxyz':
