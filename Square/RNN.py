@@ -634,9 +634,9 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
             if ny % 2 == 1:
                 for nx in range(self.Nx - 1, -1, -1):  # right to left
                     neighbor_inputs = [inputs[f"{nx + 1}{ny}"], inputs[f"{nx}{ny - 1}"],
-                                       inputs[f"{(nx + 1) % self.Nx}{ny}"], inputs[f"{nx}{(ny + 1) % self.Ny}"]]
+                                       inputs[f"{(nx - 1) % self.Nx}{ny}"], inputs[f"{nx}{(ny + 1) % self.Ny}"]]
                     neighbor_states = [rnn_states[f"{nx + 1}{ny}"], rnn_states[f"{nx}{ny - 1}"],
-                                       rnn_states[f"{(nx - 1) % self.Nx}{ny}"], rnn_states[f"{nx}{(ny - 1) % self.Ny}"]]
+                                       rnn_states[f"{(nx - 1) % self.Nx}{ny}"], rnn_states[f"{nx}{(ny + 1) % self.Ny}"]]
 
                     rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
                     output_ampl = self.dense(rnn_output)
@@ -742,9 +742,9 @@ class periodic_cMDRNNWavefunction(RNNWavefunction):
                 for nx in range(self.Nx - 1, -1, -1):  # right to left
 
                     neighbor_inputs = [inputs[f"{nx + 1}{ny}"], inputs[f"{nx}{ny - 1}"],
-                                       inputs[f"{(nx + 1) % self.Nx}{ny}"], inputs[f"{nx}{(ny + 1) % self.Ny}"]]
+                                       inputs[f"{(nx - 1) % self.Nx}{ny}"], inputs[f"{nx}{(ny + 1) % self.Ny}"]]
                     neighbor_states = [rnn_states[f"{nx + 1}{ny}"], rnn_states[f"{nx}{ny - 1}"],
-                                       rnn_states[f"{(nx - 1) % self.Nx}{ny}"], rnn_states[f"{nx}{(ny - 1) % self.Ny}"]]
+                                       rnn_states[f"{(nx - 1) % self.Nx}{ny}"], rnn_states[f"{nx}{(ny + 1) % self.Ny}"]]
 
                     rnn_output, rnn_states[f"{nx}{ny}"] = self.rnn(neighbor_inputs, neighbor_states)
                     output_ampl = self.dense(rnn_output)

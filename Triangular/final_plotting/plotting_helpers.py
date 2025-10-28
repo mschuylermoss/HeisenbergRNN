@@ -10,23 +10,23 @@ Ls_all = np.arange(6,31,6)
 rate_markers={0.158:'*',0.25:'H',0.475:'^'}
 rate_lines={0.158:':',0.25:'--',0.475:'-'}
 rate_alphas={0.475:0.2,0.25:0.5,0.158:0.9}
+rate_markersize={0.158:9,0.25:7,0.475:7}
 
-colorscale_sq = plt.get_cmap('viridis')
-colorscale_tri = plt.get_cmap('plasma')
+colorscale_sq = plt.get_cmap('plasma')
+colorscale_tri = plt.get_cmap('viridis')
 shades = np.linspace(0.,0.9,2*len(scales))[::-2]
 colors_sq = colorscale_sq(shades)
 colors_tri = colorscale_tri(shades)
-scale_shades = {'Square':{1.0:colors_sq[0],2.0:colors_sq[1],4.0:colors_sq[2]},
-                'Triangular':{1.0:colors_tri[0],2.0:colors_tri[1],4.0:colors_tri[2]}}
+scale_shades = {'Square':{1.0:colors_sq[-3],2.0:colors_sq[-2],4.0:colors_sq[-1]},
+                'Triangular':{1.0:colors_tri[-3],2.0:colors_tri[-2],4.0:colors_tri[-1]}}
 scale_shades_lists = {'Square':colors_sq[0:4],
                       'Triangular':colors_tri[0:4]}
-
 
 def add_energy_legends(reference_label=None,show_runs=False,show_zero_var=False,both_MS=False,show_const=False):
 
     if show_runs:
         runs_markers = [
-        plt.Line2D([0], [0], marker=rate_markers[rate], linestyle='None', color='grey', alpha=rate_alphas[rate], markersize=8, label=f'rate $r$ = {rate}') for rate in rates
+        plt.Line2D([0], [0], marker=rate_markers[rate], linestyle=rate_lines[rate], color='grey', alpha=rate_alphas[rate], markersize=rate_markersize[rate], label=f'rate $r$ = {rate}') for rate in rates
         ]
     else:
         runs_markers = []
@@ -38,8 +38,7 @@ def add_energy_legends(reference_label=None,show_runs=False,show_zero_var=False,
         zero_var_markers = []
     if reference_label is not None:
         reference_markers = [
-        plt.Line2D([0], [0], marker='*', linestyle='None',  color='k',markersize=8, label=f'{reference_label}'),
-        plt.Line2D([0], [0], linestyle='--', color='k', label=f'{reference_label} TDL')
+        plt.Line2D([0], [0], linestyle='--', color='k', label=f'{reference_label} TL')
         ]
     else:
         reference_markers = []
